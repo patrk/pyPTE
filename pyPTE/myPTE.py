@@ -2,34 +2,6 @@ import numpy as np
 from scipy.signal import hilbert
 
 
-# def _get_delay(phase):
-#     """
-#     Calculates the the overall delay for all phase-channel-pairs in a measurement
-#
-#     WARNING: only applicable if all pairwise delays are expected to be more or less the same
-#
-#     Parameters
-#     ----------
-#     phase : ndarray
-#         m x n ndarray : m: number of channels, n: number of samples
-#
-#     Returns
-#     -------
-#     delay : int
-#         number of time steps, average number of pairwise different signs
-#
-#     """
-#     m, n = phase.shape
-#     counter1 = 0
-#     counter2 = 0
-#     for j in range(0, n):
-#         for i in range(1, m-1):
-#             counter1 += 1
-#             if (((phase[i-1, j])*(phase[i+1, j] )) < 0):
-#                 counter2 += 1
-#     delay = int(np.round(float(counter1)/float(counter2)))
-#     return delay
-
 def _get_delay(phase):
     phase = phase
     m, n = phase.shape
