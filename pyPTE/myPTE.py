@@ -2,7 +2,19 @@ import numpy as np
 from scipy.signal import hilbert
 
 
-def _get_delay(phase):
+def get_delay(phase):
+    """
+    Computes the overall delay for a all given channels
+
+    Parameters
+    ----------
+    phase : ndarray
+        m x n ndarray : m: number of channels, n: number of samples
+
+    Returns
+    -------
+    delay : int
+    """
     phase = phase
     m, n = phase.shape
     c1 = n*(m-2)
@@ -13,7 +25,7 @@ def _get_delay(phase):
     return delay
 
 
-def _get_phase(time_series):
+def get_phase(time_series):
     """
     Computes phase from time series using a hilbert transform and computing the angles between the real and imaginary part for each sample
 
@@ -32,7 +44,7 @@ def _get_phase(time_series):
     phase = np.angle(complex_series)
     return phase
 
-def _get_discretized_phase(phase, binsize):
+def get_discretized_phase(phase, binsize):
     """
     Discretizes the phase series to rectangular bins
 
@@ -53,7 +65,7 @@ def _get_discretized_phase(phase, binsize):
     return d_phase
 
 
-def _get_binsize(phase, c = 3.49):
+def get_binsize(phase, c = 3.49):
 
     """
     Computes the bin size for the phase binning
@@ -63,7 +75,6 @@ def _get_binsize(phase, c = 3.49):
     c : float
     phase : ndarray
         m x n ndarray : m: number of channels, n: number of samples
-    method
 
     Returns
     -------
@@ -75,7 +86,7 @@ def _get_binsize(phase, c = 3.49):
     binsize = c * np.mean(np.std(phase, axis=0, ddof=1)) * m ** (-1.0 / 3)
     return binsize
 
-def _get_bincount(binsize):
+def get_bincount(binsize):
     """
     Get bin count for the interval [0, 2*pi] for giving binsize
 
@@ -93,7 +104,7 @@ def _get_bincount(binsize):
     return bincount
 
 
-def _compute_PTE(phase, delay):
+def compute_PTE(phase, delay):
 
     m, n = phase.shape
     PTE = np.zeros((n,n), dtype=float)
@@ -137,7 +148,7 @@ def _compute_PTE(phase, delay):
     return PTE
 
 def compute_dPTE_rawPTE(phase, delay):
-    raw_PTE = _compute_PTE(phase, delay)
+    raw_PTE = compute_PTE(phase, delay)
 
     tmp = np.triu(raw_PTE) + np.tril(raw_PTE).T
     with np.errstate(divide='ignore',invalid='ignore'):
