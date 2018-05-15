@@ -5,11 +5,14 @@
 
 Welcome to pyPTE's documentation!
 =================================
+pyPTE is a pythonic implementation of the Phase Transfer Method using NumPy and SciPy
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
-
+   
+   install
+   examples
+   documentation	
 
 
 Indices and tables
