@@ -3,17 +3,17 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to pyPTE's documentation!
+pyPTE documentation!
 =================================
 pyPTE is a pythonic implementation of the Phase Transfer Method using NumPy and SciPy
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1 
    
    install
    examples
    documentation	
-
+   about
 
 Indices and tables
 ==================
