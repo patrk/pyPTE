@@ -35,15 +35,15 @@ solution -= np.pi
 plt.plot(tspan, solution)
 plt.show()
 
-from pyPTE import myPTE
+from pyPTE import pyPTE
 # phase = np.swapaxes(solution, 0, 1)
 phase = solution
-delay = myPTE.get_delay(phase)
+delay = pyPTE.get_delay(phase)
 phase2 = phase + np.pi
-binsize = myPTE.get_binsize(phase2)
-bincount = myPTE.get_bincount(binsize)
-dphase = myPTE.get_discretized_phase(phase2, binsize)
-dPTE, raw_PTE = myPTE.compute_dPTE_rawPTE(dphase, delay)
+binsize = pyPTE.get_binsize(phase2)
+bincount = pyPTE.get_bincount(binsize)
+dphase = pyPTE.get_discretized_phase(phase2, binsize)
+dPTE, raw_PTE = pyPTE.compute_dPTE_rawPTE(dphase, delay)
 
 print(dPTE)
 import seaborn as sns

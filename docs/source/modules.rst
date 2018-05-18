@@ -7,3 +7,4 @@ pyPTE
    handle_multi
    myPTE
    phase_transfer_entropy
+   utils
