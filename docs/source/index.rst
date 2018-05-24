@@ -11,7 +11,7 @@ pyPTE is a pythonic implementation of the Phase Transfer Method using NumPy and 
    :maxdepth: 1 
    
    install
-   examples
+   examples_test
    documentation	
    about
 
