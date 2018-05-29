@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from scipy.signal import hilbert
 
 
@@ -109,14 +110,8 @@ def compute_PTE(phase, delay):
     m, n = phase.shape
     PTE = np.zeros((n,n), dtype=float)
 
-    sc1 = (m-delay)
-    sc2 = np.log2(sc1)
     for i in range(0, n):
         for j in range(0, n):
-    # it = np.nditer(PTE, flags=['multi_index'], op_flags=['writeonly'])
-    # while not it.finished:
-    #     i = it.multi_index[0]
-    #     j = it.multi_index[1]
 
             ypr = phase[delay:, j]
             y = phase[:-delay, j]
@@ -144,7 +139,6 @@ def compute_PTE(phase, delay):
             Hy_x = -np.nansum(np.nansum(np.multiply(P_y_x, np.log2(P_y_x))))
             Hypr_y_x = -np.nansum(np.nansum(np.nansum(np.multiply(P_ypr_y_x, np.log2(P_ypr_y_x)))))
             PTE[i, j] = Hypr_y + Hy_x - Hy - Hypr_y_x
-    # it.iternext()
     return PTE
 
 def compute_dPTE_rawPTE(phase, delay):
@@ -154,3 +148,24 @@ def compute_dPTE_rawPTE(phase, delay):
     with np.errstate(divide='ignore',invalid='ignore'):
         dPTE = np.triu(raw_PTE/tmp,1) + np.tril(raw_PTE/tmp.T,-1)
     return dPTE, raw_PTE
+
+def PTE(time_series):
+
+    phase = get_phase(time_series)
+    delay = get_delay(phase)
+    phase_inc = phase + np.pi
+    binsize = get_bincount(phase_inc)
+    d_phase = get_discretized_phase(phase_inc, binsize)
+
+    return compute_dPTE_rawPTE(d_phase, delay)
+
+def PTE_from_dataframe(data_frame):
+    time_series = data_frame.as_matrix()
+    dPTE, rPTE = PTE(time_series)
+    dPTE_df = pd.DataFrame(dPTE, index=data_frame.index, columns=data_frame.columns)
+    rPTE_df = pd.DataFrame(rPTE, index=data_frame.index, columns=data_frame.columns)
+    return dPTE_df, rPTE_df
+
+
+
+

@@ -1,5 +1,5 @@
 from multiprocessing import Pool, cpu_count
-from phase_transfer_entropy import PTE
+from pyPTE import pyPTE
 
 def _PTE_process(item):
     """

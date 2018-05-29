@@ -1,9 +1,8 @@
-import mne
-
+from pyPTE import pyPTE
 
 def interpolate_mne(raw, raw_reference):
     ref_channels = raw_reference.ch_chnames
-    raw_channels = list(raw.ch_names)
+    raw_channels = raw.ch_names
 
     diff = list(channel for channel in ref_channels if channel not in raw_channels)
 
@@ -19,3 +18,7 @@ def interpolate_mne(raw, raw_reference):
         d.interpolate_bads(verbose=False)
 
     return d
+
+def PTE_from_mne(mne_raw):
+    data_frame = mne_raw.to_data_frame()
+    return pyPTE.PTE_from_dataframe(data_frame)
