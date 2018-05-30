@@ -11,9 +11,11 @@ The standard Kuramoto model is a globally coupled system of linear differential 
 
 Neural mass model
 =================
-This example incorporates an implementation of the stochastic non-linear dynamics of coupled cortical columns based on [Jansen1995]_ and [Wendling2000]_...
+This example incorporates an implementation of the stochastic non-linear dynamics of coupled cortical columns based on [Jansen1995]_ and [Wendling2000]_
 
-.. [Jansen1995] Ben H. Jansen and Vincent G. Rit. Electroencephalogram and visual evoked potential generation in a mathematical model of coupled cortical columns. *Biological Cybernetics*, 73:357-366, 1995. 
+.. [Jansen1995] Ben H. Jansen and Vincent G. Rit. Electroencephalogram and visual evoked potential generation in a mathematical model of coupled cortical columns. *Biological Cybernetics*, 73:357-366, 1995 `doi:10.1007/BF00199471 <http://dx.doi.org/10.1007/BF00199471>`_ 
+
+.. [Wendling2000] Wendling, F. and Bellanger, J. J. and Bartolomei, F. and Chauvel, P. Relevance of nonlinear lumped-parameter models in the analysis of depth-EEG epileptic signals. *Biological Cybernetics*. 2000 `doi:10.1007/s004220000160 <http://dx.doi.org/10.1007/s004220000160>`_
 
 mne-python sample data set
 ==========================
