@@ -67,7 +67,6 @@ def get_discretized_phase(phase, binsize):
 
 
 def get_binsize(phase, c = 3.49):
-
     """
     Computes the bin size for the phase binning
 
@@ -110,6 +109,7 @@ def compute_PTE(phase, delay):
     For each channel pair (x, y) containing the individual discretized phase, which is obtained by pyPTE.pyPTE.get_discretized_phase,
     this function performs the entropy estimation by counting the occurences of phase values in x, y and y_predicted,
     which is achieved by slicing the x, y to consider delay x samples in the past and delay samples in the future.
+
     Parameters
     ----------
     phase : numpy.ndarray
@@ -191,7 +191,7 @@ def PTE(time_series):
     """
     This function performs the whole procedure of calculating the PTE:
     1. Compute the phase by applying the Hilbert transform on the time-series and calculate the angle between
-        the real and imaginary part. The phase is defined on the interval [-pi, pi[
+    the real and imaginary part. The phase is defined on the interval [-pi, pi[
     2. Estimate the analysis delay
     3. For ease of binning shift the phase along the ordinate so there are no negative values
     4. Calculate the binsize in number of samples
@@ -220,6 +220,7 @@ def PTE(time_series):
 def PTE_from_dataframe(data_frame):
     """
     This is a wrapper which allows calculating dPTE,PTE matrices by passing an pandas.DataFrame
+
     Parameters
     ----------
     data_frame : pandas.DataFrame
