@@ -68,21 +68,11 @@ def jansen_rit(g1 = 135, C=None):
             if(C is not None):
                 dy[i, 4] += ( He * ke2 *np.sum(C[i, :] * y[i,6]) )
 
-        # dyy = dy.flatten()
         return dy
 
 
     def f(y, t):
         dy = np.zeros(8)
-
-        # dy[0] = v[4]
-        # dy[4] = He*ke1* (g1*S(v[1]-v[2]) + u_mean) - 2*ke1*v[4] - v[0]*ke1**2
-        # dy[1] = v[5]
-        # dy[5] = He*ke2* (g2*S(v[0]) + p_mean) - 2*ke2*v[5] - v[1]*ke2**2
-        # dy[2] = v[6]
-        # dy[6] = Hi*ki*g4*S(v[3]) -2*ki*v[6] - v[2]*ki**2
-        # dy[3] = v[7]
-        # dy[7] = He*ke3*g3*S(v[1]-v[2]) - 2*ke3*v[7] - v[3]*ke3**2
 
         dy[0] = y[3]
         dy[3] = He * ke1 * (g1 * S(y[1] - y[2])) - 2 * ke1 * y[3] - y[0] * ke1 ** 2
@@ -107,11 +97,5 @@ def jansen_rit(g1 = 135, C=None):
         dw[5] = ke2 * He * (p_sdev + p_mean)
         return dw
 
-
-    # def pair_coupling(y1, y2, weight):
-    #     mask = np.zeros(8)
-    #     mask[5] = 1.0
-    #     v = y1[1] - y1[2]
-    #     return mask*weight*g1*He*ke2*S(v)
 
     return F, G
