@@ -20,7 +20,7 @@ def _PTE_process(item):
     key, value = item
     print(key)
     # dPTE, rawPTE = phase_transfer_entropy(value, method='myPTE')
-    raw_PTE = PTE(value, method='myPTE')
+    raw_PTE = pyPTE.PTE(value, method='myPTE')
     result = dict()
     # result[key] = dPTE, rawPTE
     result[key] = raw_PTE
