@@ -1,6 +1,6 @@
-===========
-About pyPTE
-===========
+.. ===========
+.. About pyPTE
+.. ===========
 
 pyPTE is an open-source implementation of the Phase Transfer Entropy method based on the publications [Lobier2014]_ and [Hillebrand2016]_. It is fully implemented in Python and requires only the Python libraries NumPy and SciPy.
 
