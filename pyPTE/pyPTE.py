@@ -9,7 +9,7 @@ def get_delay(phase):
 
     Parameters
     ----------
-    phase : ndarray
+    phase : numpy.ndarray
         m x n ndarray : m: number of channels, n: number of samples
 
     Returns
@@ -32,12 +32,12 @@ def get_phase(time_series):
 
     Parameters
     ----------
-    time_series : ndarray
+    time_series : numpy.ndarray
         m x n ndarray : m: number of channels, n: number of samples
 
     Returns
     -------
-    phase : ndarray
+    phase : numpy.ndarray
         m x n ndarray : m: number of channels, n: number of samples
     """
 
@@ -51,14 +51,14 @@ def get_discretized_phase(phase, binsize):
 
     Parameters
     ----------
-    phase : ndarray
+    phase : numpy.ndarray
         m x n ndarray : m: number of channels, n: number of samples
 
     binsize : float
 
     Returns
     -------
-    d_phase : ndarray
+    d_phase : numpy.ndarray
         m x n ndarray : m: number of channels, n: number of samples
 
     """
@@ -74,7 +74,7 @@ def get_binsize(phase, c = 3.49):
     Parameters
     ----------
     c : float
-    phase : ndarray
+    phase : numpy.ndarray
         m x n ndarray : m: number of channels, n: number of samples
 
     Returns
@@ -106,7 +106,23 @@ def get_bincount(binsize):
 
 
 def compute_PTE(phase, delay):
+    """
+    For each channel pair (x, y) containing the individual discretized phase, which is obtained by pyPTE.pyPTE.get_discretized_phase,
+    this function performs the entropy estimation by counting the occurences of phase values in x, y and y_predicted,
+    which is achieved by slicing the x, y to consider delay x samples in the past and delay samples in the future.
+    Parameters
+    ----------
+    phase : numpy.ndarray
+         m x n ndarray : m: number of channels, n: number of samples
+    delay : int
+        This is the analysis delta, which is the number of samples in the past to be considered for x and y
+        Momentarily delay is estimated by pyPTE.pyPTE.get_delay(). A custom delay estimation can be used as well.
 
+    Returns
+    -------
+    PTE : numpy.ndarray
+        m x m matrix containing the PTE value for each channel pair
+    """
     m, n = phase.shape
     PTE = np.zeros((n,n), dtype=float)
 
@@ -142,6 +158,17 @@ def compute_PTE(phase, delay):
     return PTE
 
 def compute_dPTE_rawPTE(phase, delay):
+    """
+
+    Parameters
+    ----------
+    phase
+    delay
+
+    Returns
+    -------
+
+    """
     raw_PTE = compute_PTE(phase, delay)
 
     tmp = np.triu(raw_PTE) + np.tril(raw_PTE).T
