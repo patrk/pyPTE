@@ -17,7 +17,9 @@ If you are using MNE_ for analyzing EEG or MEG recordings an mne.io.Raw_ object 
 
 which returns a tuple of the normalized dPTE, containing information about the directionality and the raw PTE matrix, whereas the matrices are pandas DataFrames indexed by the channel names from the mne.io.Raw_ object.
 
-In other domains the PTE calculation can be called directly by either passing a pandas DataFrame to:
+In other domains the PTE calculation can be called directly by either passing a pandas.DataFrame_ to:
+
+.. _pandas.DataFrame: https://pandas.pydata.org/pandas-docs/stable/generated/pandas.DataFrame.html
 
 .. code-block:: python
 
