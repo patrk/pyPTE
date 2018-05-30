@@ -35,7 +35,7 @@ To prevent Python module incompatibilities using a virtual environment like
 - conda
 - pyenv
 
-is highly recommendable. If you are planning to use mne-python, an Anaconda3 installation is mandandory.
+is highly recommendable. If you are planning to use mne-python, an Anaconda3 installation is mandantory.
 
 Step 1: Download pyPTE via GitHub
 =================================
