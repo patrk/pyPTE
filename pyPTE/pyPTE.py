@@ -189,10 +189,25 @@ def compute_dPTE_rawPTE(phase, delay):
 
 def PTE(time_series):
     """
+    This function performs the whole procedure of calculating the PTE:
+    1. Compute the phase by applying the Hilbert transform on the time-series and calculate the angle between
+        the real and imaginary part. The phase is defined on the interval [-pi, pi[
+    2. Estimate the analysis delay
+    3. For ease of binning shift the phase along the ordinate so there are no negative values
+    4. Calculate the binsize in number of samples
+    5. Bin the phase data
+    6. Compute the dPTE and raw_PTE
 
     Parameters
     ----------
     time_series : numpy.ndarray
+        m x n ndarray : m: number of channels, n: number of samples
+
+    Returns
+    -------
+    (dPTE, raw_PTE) : tuple of numpy.ndarray objects
+        dPTE : normalized PTE matrix, raw_PTE: original PTE values
+
     """
     phase = get_phase(time_series)
     delay = get_delay(phase)
@@ -203,6 +218,21 @@ def PTE(time_series):
     return compute_dPTE_rawPTE(d_phase, delay)
 
 def PTE_from_dataframe(data_frame):
+    """
+    This is a wrapper which allows calculating dPTE,PTE matrices by passing an pandas.DataFrame
+    Parameters
+    ----------
+    data_frame : pandas.DataFrame
+        This object contains time-series data where pandas.DataFrame.index corresponds to the time samples and
+        pandas.DataFrame.columns represents the individual channels
+
+    Returns
+    -------
+    (dPTE_df, rPTE_df) : tuple of pandas.DataFrame objects
+        The results from pyPTE.pyPTE.PTE are stored as pandas.DataFrames, while it is indexed in two dimensions by
+        pandas.DataFrame.columns of the input
+
+    """
     time_series = data_frame.as_matrix()
     dPTE, rPTE = PTE(time_series)
     dPTE_df = pd.DataFrame(dPTE, index=data_frame.columns, columns=data_frame.columns)
