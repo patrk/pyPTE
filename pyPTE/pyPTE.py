@@ -159,14 +159,25 @@ def compute_PTE(phase, delay):
 
 def compute_dPTE_rawPTE(phase, delay):
     """
+    This function calls pyPTE.pyPTE.compute_PTE to obtain a PTE matrix and
+    performs a normalization yielding dPTE to easily investigate directionality information.
+    Technically it could be a function which computes the normalization for a given PTE matrix, but it appears to be
+    more convenient to obtain both matrices in one call
 
     Parameters
     ----------
-    phase
-    delay
+    phase : numpy.ndarray
+        m x n ndarray : m: number of channels, n: number of samples
+        The discretized phase is computed by pyPTE.pyPTE.get_discretized_phase
+
+    delay : int
+        This is the analysis delta, which is the number of samples in the past to be considered for x and y
+        Momentarily delay is estimated by pyPTE.pyPTE.get_delay(). A custom delay estimation can be used as well.
 
     Returns
     -------
+    (dPTE, raw_PTE) : tuple of numpy.ndarray objects
+        dPTE : normalized PTE matrix, raw_PTE: original PTE values
 
     """
     raw_PTE = compute_PTE(phase, delay)
@@ -177,7 +188,12 @@ def compute_dPTE_rawPTE(phase, delay):
     return dPTE, raw_PTE
 
 def PTE(time_series):
+    """
 
+    Parameters
+    ----------
+    time_series : numpy.ndarray
+    """
     phase = get_phase(time_series)
     delay = get_delay(phase)
     phase_inc = phase + np.pi
