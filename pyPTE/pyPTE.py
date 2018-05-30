@@ -89,7 +89,7 @@ def get_binsize(phase, c = 3.49):
 
 def get_bincount(binsize):
     """
-    Get bin count for the interval [0, 2*pi] for giving binsize
+    Get bin count for the interval [0, 2*pi] for given binsize
 
     Parameters
     ----------
