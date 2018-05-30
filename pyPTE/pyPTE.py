@@ -154,7 +154,7 @@ def PTE(time_series):
     phase = get_phase(time_series)
     delay = get_delay(phase)
     phase_inc = phase + np.pi
-    binsize = get_bincount(phase_inc)
+    binsize = get_binsize(phase_inc)
     d_phase = get_discretized_phase(phase_inc, binsize)
 
     return compute_dPTE_rawPTE(d_phase, delay)
@@ -162,8 +162,8 @@ def PTE(time_series):
 def PTE_from_dataframe(data_frame):
     time_series = data_frame.as_matrix()
     dPTE, rPTE = PTE(time_series)
-    dPTE_df = pd.DataFrame(dPTE, index=data_frame.index, columns=data_frame.columns)
-    rPTE_df = pd.DataFrame(rPTE, index=data_frame.index, columns=data_frame.columns)
+    dPTE_df = pd.DataFrame(dPTE, index=data_frame.columns, columns=data_frame.columns)
+    rPTE_df = pd.DataFrame(rPTE, index=data_frame.columns, columns=data_frame.columns)
     return dPTE_df, rPTE_df
 
 

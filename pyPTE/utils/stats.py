@@ -20,10 +20,9 @@ def matrix_wilcoxon(x_matrices, y_matrices, alpha = 0.05, bonferroni=True):
         alpha_c = alpha*m**2
 
     for i in range(0, m):
-        temp_x = list()
-        temp_y = list()
-
         for j in range(0, m):
+            temp_x = list()
+            temp_y = list()
             for matrix in x:
                 temp_x.append(matrix[i, j])
             for matrix in y:
