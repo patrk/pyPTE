@@ -6,8 +6,10 @@
 pyPTE documentation!
 =================================
 .. include:: about.rst
+
 .. toctree::
-   :maxdepth: 1 
+   :maxdepth: 2
+
    
    install
    usage

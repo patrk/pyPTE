@@ -14,7 +14,7 @@
 #
 import os
 import sys
-sys.path.insert(0, os.path.abspath('/home/patryk/PycharmProjects/pyPTE/pyPTE/'))
+sys.path.insert(0, os.path.abspath('../pyPTE/'))
 import sphinx_readable_theme
 
 html_theme_path = [sphinx_readable_theme.get_html_theme_path()]
