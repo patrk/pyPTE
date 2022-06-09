@@ -124,10 +124,10 @@ def compute_PTE(phase, delay):
         m x m matrix containing the PTE value for each channel pair
     """
     m, n = phase.shape
-    PTE = np.zeros((n,n), dtype=float)
+    PTE = np.zeros((m,m), dtype=float)
 
-    for i in range(0, n):
-        for j in range(0, n):
+    for i in range(0, m):
+        for j in range(0, m):
 
             ypr = phase[delay:, j]
             y = phase[:-delay, j]
