@@ -83,7 +83,7 @@ Contributions to `pyPTE` are welcome! If you have suggestions, bug reports, or w
 
 ## License
 
-`pyPTE` is released under the MIT License. For more details, see the [LICENSE](https://github.com/patrk/pyPTE/blob/master/LICENSE) file.
+`pyPTE` is released under the GPL-3.0 license. For more details, see the [LICENSE](https://github.com/patrk/pyPTE/blob/master/LICENSE) file.
 
 
 
