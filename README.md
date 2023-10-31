@@ -5,12 +5,37 @@
 - Lobier et al., 2014: [Phase transfer entropy: A novel phase-based measure for directed connectivity in networks coupled by oscillatory interactions](http://dx.doi.org/10.1016/j.neuroimage.2013.08.056).
 - Hillebrand et al., 2016: [Direction of information flow in large-scale resting-state networks is frequency-dependent](http://dx.doi.org/10.1073/pnas.1515657113).
 
+## Introduction
+
+Phase Transfer Entropy (PTE) is a measure for directed connectivity in networks coupled by oscillatory interactions. The `pyPTE` library provides a Python implementation of this method, allowing researchers and developers to apply PTE analysis to their data.
+
+### Mathematical Background
+
+
+Given two time series \(X\) and \(Y\), the PTE from \(X\) to \(Y\) is defined as:
+
+\[ PTE_{X \to Y} = H(Y_{t+1} | Y_t) - H(Y_{t+1} | Y_t, X_t) \]
+
+Where:
+- \( H \) is the entropy.
+- \( Y_{t+1} \) is the phase of time series \(Y\) at time \(t+1\).
+- \( Y_t \) and \( X_t \) are the phases of time series \(Y\) and \(X\) at time \(t\), respectively.
+
+The PTE value quantifies the amount of uncertainty reduced in predicting the future phase of \(Y\) when considering the current phase of \(X\).
+
+## Features
+
+- **Efficient Computation**: Utilizes optimized algorithms for fast computation of PTE values.
+- **Flexible Input**: Accepts data in various formats, including raw time series and pre-processed frequency data.
+- **Visualization Tools**: Integrated tools for visualizing the results of PTE analysis.
+- **Extensive Documentation**: Comprehensive documentation available at [pypte.readthedocs.io](https://pypte.readthedocs.io).
+
 ## Installation and Setup
 
 ### Prerequisites:
 
 **Essential Components:**
-- Python (≥ 3.6)
+- Python (≥ 3.8)
 - Git
 - NumPy
 - SciPy
@@ -39,7 +64,7 @@ To ensure a smooth installation and prevent potential module incompatibilities, 
    Navigate to the pyPTE directory and initiate the installation:
    ```bash
    cd pyPTE
-    python setup.py install
+   python setup.py install
     ```
 
 3. **Validation of Installation**
@@ -48,8 +73,23 @@ To ensure a smooth installation and prevent potential module incompatibilities, 
     cd test
     py.test
     ```
-4. **Usage Examples**
-    tbd
+   
+## Usage
+   Using `pyPTE` is straightforward. After importing the necessary functions, you can compute the PTE values for your data:
+   ```python
+   from pyPTE import compute_PTE 
+   # Your data loading and preprocessing here
+   PTE_values = compute_PTE(data)
+   ```
+    
+## Contributing
+Contributions to `pyPTE` are welcome! If you have suggestions, bug reports, or want to contribute code via Pull Requests
+
+## License
+
+`pyPTE` is released under the MIT License. For more details, see the [LICENSE](https://github.com/patrk/pyPTE/blob/master/LICENSE) file.
+
+
 
 
 
