@@ -83,7 +83,7 @@ def get_binsize(phase, c = 3.49):
     """
 
     m, n = phase.shape
-    binsize = c * np.mean(np.std(phase, axis=0, ddof=1)) * m ** (-1.0 / 3)
+    binsize = c * np.mean(np.std(phase, axis=0, ddof=1)) * n ** (-1.0 / 3)
     return binsize
 
 def get_bincount(binsize):
