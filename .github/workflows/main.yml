@@ -73,7 +73,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           #PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
 
-
   # publish:
   #   needs: [run-tests, code-style-check, type-check]
   #   runs-on: ubuntu-latest
