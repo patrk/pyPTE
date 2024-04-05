@@ -9,19 +9,6 @@ on:
       - main 
 
 jobs:
-  cache:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-
-    - name: Cache Poetry
-      uses: actions/cache@v2
-      with:
-        path: ~/.cache/pypoetry
-        key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-poetry-
-
   setup-python:
     runs-on: ubuntu-latest
     steps:
@@ -29,29 +16,38 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: '3.12.2'
+  
 
   install-poetry:
     runs-on: ubuntu-latest
-    needs: [cache]
+    needs: [setup-python]
     steps:
-    - name: Install Poetry
+    - name: Install poetry
       run: |
-        curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python -
-        source $HOME/.poetry/env
+        python -m pip install poetry==1.1.11
+    - name: Configure poetry
+      run: |
+        python -m poetry config virtualenvs.in-project true
+    - name: Cache the virtualenv
+      uses: actions/cache@v2
+      with:
+        path: ./.venv
+      key: ${{ runner.os }}-venv-${{ hashFiles('**/poetry.lock') }}
+
 
   install-dependencies:
     runs-on: ubuntu-latest
     needs: [setup-python, install-poetry]
     steps:
     - name: Install dependencies
-      run: poetry install
+      run: python -m poetry install
 
   run-tests:
     runs-on: ubuntu-latest
     needs: [install-dependencies]
     steps:
     - name: Run tests
-      run: poetry run pytest
+      run: python -m poetry run python -m pytest -sxv
 
   type-checking:
     runs-on: ubuntu-latest
