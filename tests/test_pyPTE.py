@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from pyPTE.core.pyPTE import (
     PTE,
@@ -47,7 +48,8 @@ def test_PTE_with_independent_signals():
     binsize = get_binsize(phase_inc)
     d_phase = get_discretized_phase(phase_inc, binsize)
 
-    pte_matrix = compute_PTE(d_phase, 1)
+    delay_matrix = np.ones((2, 2))
+    pte_matrix = compute_PTE(d_phase, delay_matrix)
 
     # Check off-diagonal elements for significant PTE
     # (s1 -> s2 and s2 -> s1 should be low)
