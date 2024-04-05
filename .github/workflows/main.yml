@@ -32,7 +32,7 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ./.venv
-      key: ${{ runner.os }}-venv-${{ hashFiles('**/poetry.lock') }}
+        key: ${{ runner.os }}-venv-${{ hashFiles('**/poetry.lock') }}
 
 
   install-dependencies:
@@ -54,11 +54,11 @@ jobs:
     needs: [install-dependencies]
     steps:
     - name: Type checking
-      run: poetry run mypy .
+      run: python -m poetry run python -m mypy .
 
   build-packages:
     runs-on: self-hosted
     needs: [install-dependencies]
     steps:
     - name: Build packages
-      run: poetry build
+      run: python -m poetry build
