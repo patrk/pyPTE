@@ -3,7 +3,8 @@ import numpy as np
 
 def jansen_rit(g1 = 135, C=None):
     """
-    Neural mass model which returns a dynamical system F and Wiener process G for a given coupling matrix C
+    Neural mass model which returns a dynamical system F and Wiener process G
+    for a given coupling matrix C
 
     This function defines:
         all fixed parameters for the Jansen-Rit model
@@ -18,7 +19,8 @@ def jansen_rit(g1 = 135, C=None):
         Model parameter which determines what kind of rhythm will be generated
         default : 135 for alpha-waves
     C : ndarray
-        coupling matrix must be quadratic. values of the coupling matrix correspond to the coupling strength between neural mass models
+        coupling matrix must be quadratic. values of the coupling matrix correspond to
+        the coupling strength between neural mass models
 
     Returns
     -------

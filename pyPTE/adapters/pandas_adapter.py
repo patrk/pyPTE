@@ -5,19 +5,21 @@ from pyPTE.core import pyPTE
 
 def PTE_from_dataframe(data_frame):
     """
-    This is a wrapper which allows calculating dPTE,PTE matrices by passing an pandas.DataFrame
+    This is a wrapper which allows calculating dPTE,PTE matrices by passing a
+    pandas.DataFrame
 
     Parameters
     ----------
     data_frame : pandas.DataFrame
-        This object contains time-series data where pandas.DataFrame.index corresponds to the time samples and
-        pandas.DataFrame.columns represents the individual channels
+        This object contains time-series data where pandas.DataFrame.index corresponds
+        to the time samples and pandas.DataFrame.columns represents the
+        individual channels
 
     Returns
     -------
     (dPTE_df, rPTE_df) : tuple of pandas.DataFrame objects
-        The results from pyPTE.pyPTE.PTE are stored as pandas.DataFrames, while it is indexed in two dimensions by
-        pandas.DataFrame.columns of the input
+        The results from pyPTE.pyPTE.PTE are stored as pandas.DataFrames, while it is
+        indexed in two dimensions by pandas.DataFrame.columns of the input
 
     """
     time_series = data_frame.as_matrix()

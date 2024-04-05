@@ -1,9 +1,8 @@
+from typing import Tuple
+
 import numpy as np
 import numpy.typing as npt
-
 from scipy.signal import hilbert
-
-from typing import Tuple
 
 
 def get_delay(phase: npt.NDArray) -> int:
@@ -32,7 +31,8 @@ def get_delay(phase: npt.NDArray) -> int:
 
 def get_phase(time_series: npt.ArrayLike) -> npt.NDArray:
     """
-    Computes phase from time series using a hilbert transform and computing the angles between the real and imaginary part for each sample
+    Computes phase from time series using a hilbert transform and computing the angles
+    between the real and imaginary part for each sample
 
     Parameters
     ----------
@@ -112,17 +112,20 @@ def get_bincount(binsize: float) -> int:
 
 def compute_PTE(phase: npt.NDArray, delay: int) -> npt.NDArray:
     """
-    For each channel pair (x, y) containing the individual discretized phase, which is obtained by pyPTE.pyPTE.get_discretized_phase,
-    this function performs the entropy estimation by counting the occurences of phase values in x, y and y_predicted,
-    which is achieved by slicing the x, y to consider delay x samples in the past and delay samples in the future.
+    For each channel pair (x, y) containing the individual discretized phase,
+    which is obtained by pyPTE.pyPTE.get_discretized_phase,
+    this function performs the entropy estimation by counting the occurences of
+    phase values in x, y and y_predicted, which is achieved by slicing the x, y
+    to consider delay x samples in the past and delay samples in the future.
 
     Parameters
     ----------
     phase : numpy.ndarray
          m x n ndarray : m: number of channels, n: number of samples
     delay : int
-        This is the analysis delta, which is the number of samples in the past to be considered for x and y
-        Momentarily delay is estimated by pyPTE.pyPTE.get_delay(). A custom delay estimation can be used as well.
+        This is the analysis delta, which is the number of samples in the past
+        to be considered for x and y. Momentarily delay is estimated by
+        pyPTE.pyPTE.get_delay(). A custom delay estimation can be used as well.
 
     Returns
     -------
@@ -170,10 +173,10 @@ def compute_dPTE_rawPTE(
     phase: npt.NDArray, delay: int
 ) -> Tuple[npt.NDArray, npt.NDArray]:
     """
-    This function calls pyPTE.pyPTE.compute_PTE to obtain a PTE matrix and
-    performs a normalization yielding dPTE to easily investigate directionality information.
-    Technically it could be a function which computes the normalization for a given PTE matrix, but it appears to be
-    more convenient to obtain both matrices in one call
+    This function calls pyPTE.pyPTE.compute_PTE to obtain a PTE matrix and performs a
+    normalization yielding dPTE to easily investigate directionality information.
+    Technically it could be a function which computes the normalization for a given
+    PTE matrix, but it appears to be more convenient to obtain both matrices in one call
 
     Parameters
     ----------
@@ -182,8 +185,9 @@ def compute_dPTE_rawPTE(
         The discretized phase is computed by pyPTE.pyPTE.get_discretized_phase
 
     delay : int
-        This is the analysis delta, which is the number of samples in the past to be considered for x and y
-        Momentarily delay is estimated by pyPTE.pyPTE.get_delay(). A custom delay estimation can be used as well.
+        This is the analysis delta, which is the number of samples in the past to be
+        considered for x and y. Momentarily delay is estimated by
+        pyPTE.pyPTE.get_delay(). A custom delay estimation can be used as well.
 
     Returns
     -------
@@ -202,10 +206,11 @@ def compute_dPTE_rawPTE(
 def PTE(time_series: npt.ArrayLike) -> Tuple[npt.NDArray, npt.NDArray]:
     """
     This function performs the whole procedure of calculating the PTE:
-    1. Compute the phase by applying the Hilbert transform on the time-series and calculate the angle between
-    the real and imaginary part. The phase is defined on the interval [-pi, pi[
+    1. Compute the phase by applying the Hilbert transform on the time-series and
+    calculate the angle between the real and imaginary part.
+    The phase is defined on the interval [-pi, pi[
     2. Estimate the analysis delay
-    3. For ease of binning shift the phase along the ordinate so there are no negative values
+    3. For binning, shift the phase along the ordinate so there are no negatives values
     4. Calculate the binsize in number of samples
     5. Bin the phase data
     6. Compute the dPTE and raw_PTE

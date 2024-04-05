@@ -3,11 +3,13 @@ from pyPTE.core import pyPTE
 
 def interpolate_mne(raw, raw_reference):
     """
-    This is a utility function which circumvents the issue that MNE allows to interpolate only channels,
-    which are present and marked as bad channels. Missing channels in a raw file can be interpolated
-    by passing the mne.io.Raw object subject to interpolation and a reference object which contains all channels.
-    This is achieved by copying channels, replacing its channel information by the reference channels,
-    marking it as bad and finally utilizing mne.io.Raw.interpolate_bads()
+    This is a utility function which circumvents the issue that MNE allows to
+    interpolate only channels, which are present and marked as bad channels.
+    Missing channels in a raw file can be interpolated by passing the mne.io.Raw object
+    subject to interpolation and a reference object which contains all channels.
+    This is achieved by copying channels, replacing its channel information by
+    the reference channels, marking it as bad and finally utilizing
+    mne.io.Raw.interpolate_bads()
 
     Parameters
     ----------
@@ -19,7 +21,8 @@ def interpolate_mne(raw, raw_reference):
     Returns
     -------
     d : mne.io.Raw
-        New object containing all information from the original raw object and interpolated channels
+        New object containing all information from the original raw object and
+        interpolated channels
 
     """
     ref_channels = raw_reference.ch_chnames
@@ -43,8 +46,8 @@ def interpolate_mne(raw, raw_reference):
 
 def PTE_from_mne(mne_raw):
     """
-    This is a wrapper which allows calculating dPTE,PTE matrices by passing an mne.io.Raw object
-    and calling pyPTE.pyPTE.PTE_from_dataframe().
+    This is a wrapper which allows calculating dPTE,PTE matrices by passing an
+    mne.io.Raw object and calling pyPTE.pyPTE.PTE_from_dataframe().
 
     Parameters
     ----------
@@ -54,8 +57,9 @@ def PTE_from_mne(mne_raw):
     Returns
     -------
     result : pandas.DataFrame
-        The wrapper returns a tuple of (dPTE, PTE) matrices, which are stored as a pandas.DataFrame and indexed by
-        the channels names of the input file. This allows convenient analysis of the results.
+        The wrapper returns a tuple of (dPTE, PTE) matrices, which are stored as a
+        pandas.DataFrame and indexed by the channels names of the input file.
+        This allows convenient analysis of the results.
 
     """
 

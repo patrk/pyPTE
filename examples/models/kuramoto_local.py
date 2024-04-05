@@ -1,4 +1,12 @@
+import itertools
+
 import numpy as np
+import seaborn as sns
+from matplotlib import pyplot as plt
+from sdeint import itoint
+
+from pyPTE.core import pyPTE
+
 
 def kuramoto(omega_vector, K, N, sigma):
     def f(theta_vector, t):
@@ -38,10 +46,10 @@ t_end = 1
 steps = t_end / dt
 # K[:,3] = 100
 f, G = kuramoto(omega, K, N, 0.01)
-from sdeint import itoint
+
 tspan = np.linspace(0, t_end, steps)
 solution = itoint(f, G, theta0, tspan)
-from matplotlib import pyplot as plt
+
 plt.figure(1)
 plt.subplot(211)
 plt.plot(tspan, solution)
@@ -52,12 +60,14 @@ plt.subplot(212)
 plt.plot(tspan, solution)
 plt.show()
 
-import itertools
+
 
 dt = 0.1
 t_end = 10
 steps = t_end / dt
-from sdeint import itoint
+
+
+
 def repetitive_sims(K, N, theta0, omega, Nsims):
     solutions = list()
     for _ in itertools.repeat(None, Nsims):
@@ -72,7 +82,8 @@ def repetitive_sims(K, N, theta0, omega, Nsims):
 # Nsim = 10
 # solutions = repetitive_sims(K, N, theta0, omega, Nsim)
 
-from matplotlib import pyplot as plt
+
+
 # for solution in solutions:
 #     plt.plot(solution)
 #     plt.show()
@@ -91,7 +102,7 @@ from matplotlib import pyplot as plt
 #
 # average_dPTE = np.sum(dPTEs) / len(dPTEs)
 
-from pyPTE.core import pyPTE
+
 # phase = np.swapaxes(solution, 0, 1)
 phase = solution
 delay = pyPTE.get_delay(phase)
@@ -104,7 +115,8 @@ dPTE, raw_PTE = pyPTE.compute_dPTE_rawPTE(dphase, delay)
 
 
 
-import seaborn as sns
+
+
 plt.figure(1)
 
 cmap = sns.diverging_palette(240, 10, as_cmap=True, n=7)
