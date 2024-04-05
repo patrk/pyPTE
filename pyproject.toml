@@ -30,6 +30,11 @@ black = "^24.3.0"
 mypy = "^1.9.0"
 ruff = "^0.3.0"
 
+[tool.poetry.group.extras.dependencies]
+seaborn = "^0.13.2"
+matplotlib = "^3.8.4"
+sdeint = "^0.3.0"
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 
@@ -41,6 +46,17 @@ pythonpath = ["."]
 [tool.black]
 line-length = 88
 target-version = ['py312']
+
+[tool.mypy]
+check_untyped_defs = true
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = ["scipy", "mne", "seaborn", "sdeint"]
+ignore_missing_imports = true
 
 [build-system]
 requires = ["poetry-core>=1.9"]

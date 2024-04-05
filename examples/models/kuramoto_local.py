@@ -43,7 +43,7 @@ K[2,3] = 0
 
 dt = 0.01
 t_end = 1
-steps = t_end / dt
+steps = int(t_end / dt)
 # K[:,3] = 100
 f, G = kuramoto(omega, K, N, 0.01)
 
@@ -64,7 +64,7 @@ plt.show()
 
 dt = 0.1
 t_end = 10
-steps = t_end / dt
+steps = int(t_end / dt)
 
 
 

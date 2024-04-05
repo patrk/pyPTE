@@ -1,4 +1,4 @@
-from pyPTE.core import pyPTE
+from pandas_adapter import PTE_from_dataframe
 
 
 def interpolate_mne(raw, raw_reference):
@@ -64,4 +64,4 @@ def PTE_from_mne(mne_raw):
     """
 
     data_frame = mne_raw.to_data_frame()
-    return pyPTE.PTE_from_dataframe(data_frame)
+    return PTE_from_dataframe(data_frame)
