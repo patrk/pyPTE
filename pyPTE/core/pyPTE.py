@@ -20,9 +20,9 @@ def get_delay(phase: npt.NDArray) -> int:
     """
     phase = phase
     m, n = phase.shape
-    c1 = n * (m - 2)
-    r_phase = np.roll(phase, 2, axis=0)
-    phase_product = np.multiply(phase, r_phase)[1:-1]
+    c1 = n * m
+    r_phase = np.roll(phase, 1, axis=0)
+    phase_product = np.multiply(phase, r_phase)
     c2 = (phase_product < 0).sum()
     delay = int(np.round(c1 / c2))
 
