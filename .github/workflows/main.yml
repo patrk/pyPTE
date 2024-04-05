@@ -1,0 +1,94 @@
+name: CI/CD Workflow
+
+on:
+  push:
+    branches: ['*']
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  type-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.12.2'
+      - name: Install Poetry
+        run: pip install poetry
+      - name: Install dependencies
+        run: poetry install
+      - name: Perform type checking
+        run: poetry run mypy .
+  run-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.12.2'
+      - name: Install Poetry
+        run: pip install poetry
+      - name: Install dependencies
+        run: poetry install
+      - name: Execute tests
+        run: poetry run pytest
+
+  code-style-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.12.2'
+      - name: Install Poetry
+        run: pip install poetry
+      - name: Install dependencies
+        run: poetry install
+      - name: Check code style
+        run: poetry run ruff check
+
+    release:
+      needs: [run-tests, code-style-check, type-check]
+      runs-on: ubuntu-latest
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      steps:
+        - uses: actions/checkout@v2
+          with:
+            fetch-depth: 0 
+        - name: Set up Python
+          uses: actions/setup-python@v2
+          with:
+            python-version: '3.12.2'
+        - name: Install Dependencies
+          run: |
+            pip install poetry
+            poetry install
+        - name: Semantic Release
+          run: poetry run semantic-release publish
+          env:
+            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            #PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+
+
+  # publish:
+  #   needs: [run-tests, code-style-check, type-check]
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - name: Set up Python
+  #       uses: actions/setup-python@v2
+  #       with:
+  #         python-version: '3.12.2'
+  #     - name: Install Poetry
+  #       run: pip install poetry
+  #     - name: Install dependencies
+  #       run: poetry install
+  #     - name: Publish package
+  #       uses: pypa/gh-action-pypi-publish@master
+  #       with:
+  #         user: __token__
+  #         password: ${{ secrets.PYPI_API_TOKEN }}

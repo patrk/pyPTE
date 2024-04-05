@@ -1,0 +1,71 @@
+[tool.poetry]
+name = "pyPTE"
+version = "0.1.0"
+description = "Pythonic implementation of the Phase Transfer Entropy using NumPy and SciPy"
+authors = ["Patryk Mikulski"]  
+license = "GPL-3.0-or-later"
+readme = "README.md"
+keywords = ["PTE", "phase transfer entropy", "neuroscience", "signal processing"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Topic :: Scientific/Engineering",
+]
+
+[tool.poetry.dependencies]
+python = "3.12.2"  
+numpy = "1.26.4"
+pandas = "2.2.1"
+scipy = "1.13.0"
+mne = "1.6.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.1.1"
+black = "^24.3.0"
+mypy = "^1.9.0"
+ruff = "^0.3.0"
+python-semantic-release = "^9.4.0"
+
+[tool.poetry.group.extras.dependencies]
+seaborn = "^0.13.2"
+matplotlib = "^3.8.4"
+sdeint = "^0.3.0"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.ruff]
+  line-length = 88
+  # pyflakes, pycodestyle, isort
+  select = ["F", "E", "W", "I001"]
+
+[tool.black]
+line-length = 88
+target-version = ['py312']
+
+[tool.mypy]
+check_untyped_defs = true
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = ["scipy", "mne", "seaborn", "sdeint"]
+ignore_missing_imports = true
+
+[tool.semantic_release]
+version_variable = "pyPTE/__init__.py:__version__"
+branch = "main"
+upload_to_pypi = "false"
+
+[build-system]
+requires = ["poetry-core>=1.9"]
+build-backend = "poetry.core.masonry.api"
+
+

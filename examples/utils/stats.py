@@ -1,6 +1,7 @@
-from scipy.stats import wilcoxon
 import numpy as np
 import pandas as pd
+from scipy.stats import wilcoxon
+
 
 def matrix_wilcoxon(x_matrices, y_matrices, alpha = 0.05, bonferroni=True):
     x = list()
@@ -36,7 +37,9 @@ def matrix_wilcoxon(x_matrices, y_matrices, alpha = 0.05, bonferroni=True):
             else:
                 p_mask[i, j] = True
 
-    p_values_df = pd.DataFrame(p_values, index=x_matrices[0].index, columns=x_matrices[0].columns)
-    p_mask_df = pd.DataFrame(p_mask, index=x_matrices[0].index, columns=x_matrices[0].columns)
+    p_values_df = pd.DataFrame(p_values, index=x_matrices[0].index,
+                               columns=x_matrices[0].columns)
+    p_mask_df = pd.DataFrame(p_mask, index=x_matrices[0].index,
+                             columns=x_matrices[0].columns)
 
     return p_values_df, p_mask_df

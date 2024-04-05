@@ -1,7 +1,13 @@
 from multiprocessing import Pool, cpu_count
-from pyPTE import pyPTE
+from typing import Any, Dict, List, Tuple
 
-def _PTE_process(item):
+import numpy.typing as npt
+
+from pyPTE.core import pyPTE
+
+
+def _PTE_process(item: Tuple[Any, npt.ArrayLike]) ->(
+        Dict[Any, Tuple[npt.NDArray, npt.NDArray]]):
     """
     Multi processing pool worker for PTE computation - wraps PTE method
 
@@ -19,15 +25,13 @@ def _PTE_process(item):
 
     key, value = item
     print(key)
-    # dPTE, rawPTE = phase_transfer_entropy(value, method='myPTE')
-    raw_PTE = pyPTE.PTE(value, method='myPTE')
-    result = dict()
-    # result[key] = dPTE, rawPTE
-    result[key] = raw_PTE
+    (dPTE, raw_PTE) = pyPTE.PTE(value)
+    result = {key: (dPTE, raw_PTE)}
     return result
 
 
-def multi_process(measurements):
+def multi_process(measurements: Dict[Any, npt.ArrayLike]) -> (
+        List[Dict[Any, Tuple[npt.NDArray, npt.NDArray]]]):
     """
 
     Parameters
@@ -41,10 +45,6 @@ def multi_process(measurements):
         dict: key, (dPTE, rawPTE) tuple
 
     """
-    results = []
-    print(cpu_count())
-    pool = Pool(processes=cpu_count())
-    r = pool.map_async(_PTE_process, list(measurements.items()), callback=results.append)
-    r.wait()
-    pool.close()
-    return results
+    with Pool(processes=cpu_count()) as pool:
+        result_dicts = pool.map(_PTE_process, list(measurements.items()))
+    return result_dicts
