@@ -10,7 +10,7 @@ on:
 
 jobs:
   setup-python:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
     - name: Set up Python
       uses: actions/setup-python@v2
@@ -19,7 +19,7 @@ jobs:
   
 
   install-poetry:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [setup-python]
     steps:
     - name: Install poetry
@@ -36,28 +36,28 @@ jobs:
 
 
   install-dependencies:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [setup-python, install-poetry]
     steps:
     - name: Install dependencies
       run: python -m poetry install
 
   run-tests:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [install-dependencies]
     steps:
     - name: Run tests
       run: python -m poetry run python -m pytest -sxv
 
   type-checking:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [install-dependencies]
     steps:
     - name: Type checking
       run: poetry run mypy .
 
   build-packages:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [install-dependencies]
     steps:
     - name: Build packages
