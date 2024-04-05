@@ -46,9 +46,5 @@ def multi_process(measurements: Dict[Any, npt.ArrayLike]) -> (
 
     """
     with Pool(processes=cpu_count()) as pool:
-        # Directly use pool.map here for simplicity, which blocks until the result is ready
         result_dicts = pool.map(_PTE_process, list(measurements.items()))
-
-    # Assuming pool.map returns a list of single-item dictionaries,
-    # directly return this list
     return result_dicts
