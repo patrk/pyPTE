@@ -1,15 +1,9 @@
-[build-system]
-requires = ["setuptools>=42", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[project]
+[tool.poetry]
 name = "pyPTE"
 version = "0.1.0"
 description = "Pythonic implementation of the Phase Transfer Entropy using NumPy and SciPy"
-authors = [
-    { name = "Patryk Mikulski"},
-]
-license = { file = "LICENSE" }
+authors = ["Patryk Mikulski"]  
+license = "GPL-3.0-or-later"
 readme = "README.md"
 keywords = ["PTE", "phase transfer entropy", "neuroscience", "signal processing"]
 classifiers = [
@@ -23,17 +17,31 @@ classifiers = [
     "Topic :: Scientific/Engineering",
 ]
 
-dependencies = [
-    "numpy==1.26.4",
-    "pandas==2.2.1",
-    "scipy==1.13.0",
-    "mne==1.6.1",
-]
+[tool.poetry.dependencies]
+python = "^3.12.2"  
+numpy = "1.26.4"
+pandas = "2.2.1"
+scipy = "1.13.0"
+mne = "1.6.1"
 
+[tool.poetry.dev-dependencies]
+pytest = "^8.1.1"
+black = "^24.3.0"
+mypy = "^1.9.0"
+ruff = "^0.3.0"
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=6.0",
-    "black",
-    # any other development dependencies like linters, doc generators
-]
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.ruff]
+  line-length = 88
+  # pyflakes, pycodestyle, isort
+  select = ["F", "E", "W", "I001"]
+
+[tool.black]
+line-length = 88
+target-version = ['py312']
+
+[build-system]
+requires = ["poetry-core>=1.9"]
+build-backend = "poetry.core.masonry.api"

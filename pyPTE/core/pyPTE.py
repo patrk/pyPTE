@@ -21,11 +21,11 @@ def get_delay(phase: npt.NDArray) -> int:
     """
     phase = phase
     m, n = phase.shape
-    c1 = n*(m-2)
+    c1 = n * (m - 2)
     r_phase = np.roll(phase, 2, axis=0)
     phase_product = np.multiply(phase, r_phase)[1:-1]
     c2 = (phase_product < 0).sum()
-    delay = int(np.round(c1/c2))
+    delay = int(np.round(c1 / c2))
 
     return delay
 
@@ -49,6 +49,7 @@ def get_phase(time_series: npt.ArrayLike) -> npt.NDArray:
     phase = np.angle(complex_series)
     return phase
 
+
 def get_discretized_phase(phase: npt.NDArray, binsize: float) -> npt.NDArray:
     """
     Discretizes the phase series to rectangular bins
@@ -70,7 +71,7 @@ def get_discretized_phase(phase: npt.NDArray, binsize: float) -> npt.NDArray:
     return d_phase
 
 
-def get_binsize(phase: npt.NDArray, c: float=3.49) -> float:
+def get_binsize(phase: npt.NDArray, c: float = 3.49) -> float:
     """
     Computes the bin size for the phase binning
 
@@ -89,6 +90,7 @@ def get_binsize(phase: npt.NDArray, c: float=3.49) -> float:
     m, n = phase.shape
     binsize = c * np.mean(np.std(phase, axis=0, ddof=1)) * n ** (-1.0 / 3)
     return binsize
+
 
 def get_bincount(binsize: float) -> int:
     """
@@ -128,7 +130,7 @@ def compute_PTE(phase: npt.NDArray, delay: int) -> npt.NDArray:
         m x m matrix containing the PTE value for each channel pair
     """
     m, n = phase.shape
-    PTE = np.zeros((m,m), dtype=float)
+    PTE = np.zeros((m, m), dtype=float)
 
     for i in range(0, m):
         for j in range(0, m):
@@ -137,7 +139,7 @@ def compute_PTE(phase: npt.NDArray, delay: int) -> npt.NDArray:
             y = phase[:-delay, j]
             x = phase[:-delay, i]
 
-            P_y = np.zeros([y.max() +1])
+            P_y = np.zeros([y.max() + 1])
             np.add.at(P_y, [y], 1)
 
             max_dim_ypr_y = max(ypr.max(), y.max()) + 1
@@ -149,19 +151,24 @@ def compute_PTE(phase: npt.NDArray, delay: int) -> npt.NDArray:
             max_dim_ypr_y_x = max(ypr.max(), y.max(), x.max()) + 1
             P_ypr_y_x = np.zeros([max_dim_ypr_y_x, max_dim_ypr_y_x, max_dim_ypr_y_x])
 
-            P_y /= (m-delay)
-            P_ypr_y /= (m-delay)
-            P_y_x /= (m-delay)
-            P_ypr_y_x /= (m-delay)
+            P_y /= m - delay
+            P_ypr_y /= m - delay
+            P_y_x /= m - delay
+            P_ypr_y_x /= m - delay
 
-            Hy = -np.nansum(np.multiply(P_y,np.log2(P_y)))
-            Hypr_y = - np.nansum(np.nansum(np.multiply(P_ypr_y, np.log2(P_ypr_y))))
+            Hy = -np.nansum(np.multiply(P_y, np.log2(P_y)))
+            Hypr_y = -np.nansum(np.nansum(np.multiply(P_ypr_y, np.log2(P_ypr_y))))
             Hy_x = -np.nansum(np.nansum(np.multiply(P_y_x, np.log2(P_y_x))))
-            Hypr_y_x = -np.nansum(np.nansum(np.nansum(np.multiply(P_ypr_y_x, np.log2(P_ypr_y_x)))))
+            Hypr_y_x = -np.nansum(
+                np.nansum(np.nansum(np.multiply(P_ypr_y_x, np.log2(P_ypr_y_x))))
+            )
             PTE[i, j] = Hypr_y + Hy_x - Hy - Hypr_y_x
     return PTE
 
-def compute_dPTE_rawPTE(phase: npt.NDArray, delay: int) -> Tuple[npt.NDArray, npt.NDArray]:
+
+def compute_dPTE_rawPTE(
+    phase: npt.NDArray, delay: int
+) -> Tuple[npt.NDArray, npt.NDArray]:
     """
     This function calls pyPTE.pyPTE.compute_PTE to obtain a PTE matrix and
     performs a normalization yielding dPTE to easily investigate directionality information.
@@ -187,9 +194,10 @@ def compute_dPTE_rawPTE(phase: npt.NDArray, delay: int) -> Tuple[npt.NDArray, np
     raw_PTE = compute_PTE(phase, delay)
 
     tmp = np.triu(raw_PTE) + np.tril(raw_PTE).T
-    with np.errstate(divide='ignore',invalid='ignore'):
-        dPTE = np.triu(raw_PTE/tmp,1) + np.tril(raw_PTE/tmp.T,-1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        dPTE = np.triu(raw_PTE / tmp, 1) + np.tril(raw_PTE / tmp.T, -1)
     return dPTE, raw_PTE
+
 
 def PTE(time_series: npt.ArrayLike) -> Tuple[npt.NDArray, npt.NDArray]:
     """
@@ -220,9 +228,3 @@ def PTE(time_series: npt.ArrayLike) -> Tuple[npt.NDArray, npt.NDArray]:
     d_phase = get_discretized_phase(phase_inc, binsize)
 
     return compute_dPTE_rawPTE(d_phase, delay)
-
-
-
-
-
-

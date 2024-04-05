@@ -1,13 +1,11 @@
 import numpy as np
-from pyPTE import get_phase
+from pyPTE.core.pyPTE import get_phase, get_binsize, get_discretized_phase
+from pyPTE.core.pyPTE import compute_PTE, PTE
 
 def test_get_phase_zeros_input():
     time_series = np.array([[0, 0, 0], [0, 0, 0]])
     expected_phase_result = np.array([[0, 0, 0], [0, 0, 0]])
     np.testing.assert_almost_equal(get_phase(time_series), expected_phase_result, decimal=5)
-
-
-from pyPTE import get_discretized_phase
 
 def test_get_discretized_phase():
     phase_data = np.array([np.pi/4, np.pi/2, 3*np.pi/4])
@@ -16,17 +14,11 @@ def test_get_discretized_phase():
     discretized_phase = get_discretized_phase(phase_data, binsize)
     np.testing.assert_array_equal(discretized_phase, expected_discretized_phase, "Discretized phase did not match expected values.")
 
-
-from pyPTE import compute_PTE, get_binsize
-
 def test_PTE_integration():
     time_series = np.random.rand(5, 100) 
     dPTE, raw_PTE = PTE(time_series)
     assert dPTE.shape == (5, 5), f"Expected dPTE shape (5, 5), got {dPTE.shape}"
     assert raw_PTE.shape == (5, 5), f"Expected raw_PTE shape (5, 5), got {raw_PTE.shape}"
-
-
-from pyPTE import PTE  # Adjust the import path as necessary
 
 def test_PTE_with_independent_signals():
     signal_length = 1000
