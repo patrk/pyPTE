@@ -91,7 +91,7 @@ from matplotlib import pyplot as plt
 #
 # average_dPTE = np.sum(dPTEs) / len(dPTEs)
 
-from pyPTE import pyPTE
+from pyPTE.core import pyPTE
 # phase = np.swapaxes(solution, 0, 1)
 phase = solution
 delay = pyPTE.get_delay(phase)

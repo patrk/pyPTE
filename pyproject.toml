@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyPTE"
+version = "0.1.0"
+description = "Pythonic implementation of the Phase Transfer Entropy using NumPy and SciPy"
+authors = [
+    { name = "Patryk Mikulski"},
+]
+license = { file = "LICENSE" }
+readme = "README.md"
+keywords = ["PTE", "phase transfer entropy", "neuroscience", "signal processing"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Topic :: Scientific/Engineering",
+]
+
+dependencies = [
+    "numpy==1.26.4",
+    "pandas==2.2.1",
+    "scipy==1.13.0",
+    "mne==1.6.1",
+]
+
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "black",
+    # any other development dependencies like linters, doc generators
+]

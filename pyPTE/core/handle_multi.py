@@ -1,5 +1,5 @@
 from multiprocessing import Pool, cpu_count
-from pyPTE import pyPTE
+from pyPTE.core import pyPTE
 
 def _PTE_process(item):
     """

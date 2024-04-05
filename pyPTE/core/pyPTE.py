@@ -1,9 +1,12 @@
 import numpy as np
-import pandas as pd
+import numpy.typing as npt
+
 from scipy.signal import hilbert
 
+from typing import Tuple
 
-def get_delay(phase):
+
+def get_delay(phase: npt.NDArray) -> int:
     """
     Computes the overall delay for a all given channels
 
@@ -20,13 +23,14 @@ def get_delay(phase):
     m, n = phase.shape
     c1 = n*(m-2)
     r_phase = np.roll(phase, 2, axis=0)
-    m = np.multiply(phase, r_phase)[1:-1]
-    c2 = (m < 0).sum()
+    phase_product = np.multiply(phase, r_phase)[1:-1]
+    c2 = (phase_product < 0).sum()
     delay = int(np.round(c1/c2))
+
     return delay
 
 
-def get_phase(time_series):
+def get_phase(time_series: npt.ArrayLike) -> npt.NDArray:
     """
     Computes phase from time series using a hilbert transform and computing the angles between the real and imaginary part for each sample
 
@@ -45,7 +49,7 @@ def get_phase(time_series):
     phase = np.angle(complex_series)
     return phase
 
-def get_discretized_phase(phase, binsize):
+def get_discretized_phase(phase: npt.NDArray, binsize: float) -> npt.NDArray:
     """
     Discretizes the phase series to rectangular bins
 
@@ -66,7 +70,7 @@ def get_discretized_phase(phase, binsize):
     return d_phase
 
 
-def get_binsize(phase, c = 3.49):
+def get_binsize(phase: npt.NDArray, c: float=3.49) -> float:
     """
     Computes the bin size for the phase binning
 
@@ -86,7 +90,7 @@ def get_binsize(phase, c = 3.49):
     binsize = c * np.mean(np.std(phase, axis=0, ddof=1)) * n ** (-1.0 / 3)
     return binsize
 
-def get_bincount(binsize):
+def get_bincount(binsize: float) -> int:
     """
     Get bin count for the interval [0, 2*pi] for given binsize
 
@@ -104,7 +108,7 @@ def get_bincount(binsize):
     return bincount
 
 
-def compute_PTE(phase, delay):
+def compute_PTE(phase: npt.NDArray, delay: int) -> npt.NDArray:
     """
     For each channel pair (x, y) containing the individual discretized phase, which is obtained by pyPTE.pyPTE.get_discretized_phase,
     this function performs the entropy estimation by counting the occurences of phase values in x, y and y_predicted,
@@ -136,14 +140,14 @@ def compute_PTE(phase, delay):
             P_y = np.zeros([y.max() +1])
             np.add.at(P_y, [y], 1)
 
-            P_ypr_y = np.zeros([ypr.max()+1, y.max()+1])
-            np.add.at(P_ypr_y, [ypr, y], 1)
+            max_dim_ypr_y = max(ypr.max(), y.max()) + 1
+            P_ypr_y = np.zeros([max_dim_ypr_y, max_dim_ypr_y])
 
-            P_y_x = np.zeros([y.max()+1, x.max()+1])
-            np.add.at(P_y_x, [y, x], 1)
+            max_dim_y_x = max(y.max(), x.max()) + 1
+            P_y_x = np.zeros([max_dim_y_x, max_dim_y_x])
 
-            P_ypr_y_x = np.zeros([ypr.max()+1, y.max()+1, x.max()+1])
-            np.add.at(P_ypr_y_x, [ypr, y, x], 1)
+            max_dim_ypr_y_x = max(ypr.max(), y.max(), x.max()) + 1
+            P_ypr_y_x = np.zeros([max_dim_ypr_y_x, max_dim_ypr_y_x, max_dim_ypr_y_x])
 
             P_y /= (m-delay)
             P_ypr_y /= (m-delay)
@@ -157,7 +161,7 @@ def compute_PTE(phase, delay):
             PTE[i, j] = Hypr_y + Hy_x - Hy - Hypr_y_x
     return PTE
 
-def compute_dPTE_rawPTE(phase, delay):
+def compute_dPTE_rawPTE(phase: npt.NDArray, delay: int) -> Tuple[npt.NDArray, npt.NDArray]:
     """
     This function calls pyPTE.pyPTE.compute_PTE to obtain a PTE matrix and
     performs a normalization yielding dPTE to easily investigate directionality information.
@@ -187,7 +191,7 @@ def compute_dPTE_rawPTE(phase, delay):
         dPTE = np.triu(raw_PTE/tmp,1) + np.tril(raw_PTE/tmp.T,-1)
     return dPTE, raw_PTE
 
-def PTE(time_series):
+def PTE(time_series: npt.ArrayLike) -> Tuple[npt.NDArray, npt.NDArray]:
     """
     This function performs the whole procedure of calculating the PTE:
     1. Compute the phase by applying the Hilbert transform on the time-series and calculate the angle between
@@ -217,28 +221,7 @@ def PTE(time_series):
 
     return compute_dPTE_rawPTE(d_phase, delay)
 
-def PTE_from_dataframe(data_frame):
-    """
-    This is a wrapper which allows calculating dPTE,PTE matrices by passing an pandas.DataFrame
 
-    Parameters
-    ----------
-    data_frame : pandas.DataFrame
-        This object contains time-series data where pandas.DataFrame.index corresponds to the time samples and
-        pandas.DataFrame.columns represents the individual channels
-
-    Returns
-    -------
-    (dPTE_df, rPTE_df) : tuple of pandas.DataFrame objects
-        The results from pyPTE.pyPTE.PTE are stored as pandas.DataFrames, while it is indexed in two dimensions by
-        pandas.DataFrame.columns of the input
-
-    """
-    time_series = data_frame.as_matrix()
-    dPTE, rPTE = PTE(time_series)
-    dPTE_df = pd.DataFrame(dPTE, index=data_frame.columns, columns=data_frame.columns)
-    rPTE_df = pd.DataFrame(rPTE, index=data_frame.columns, columns=data_frame.columns)
-    return dPTE_df, rPTE_df
 
 
 

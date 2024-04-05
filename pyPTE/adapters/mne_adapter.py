@@ -1,4 +1,4 @@
-from pyPTE import pyPTE
+from pyPTE.core import pyPTE
 
 def interpolate_mne(raw, raw_reference):
     """

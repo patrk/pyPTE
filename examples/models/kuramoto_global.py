@@ -35,7 +35,7 @@ solution -= np.pi
 plt.plot(tspan, solution)
 plt.show()
 
-from pyPTE import pyPTE
+from pyPTE.core import pyPTE
 # phase = np.swapaxes(solution, 0, 1)
 phase = solution
 delay = pyPTE.get_delay(phase)
