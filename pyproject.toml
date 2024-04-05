@@ -18,17 +18,18 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.12.2"  
+python = "3.12.2"  
 numpy = "1.26.4"
 pandas = "2.2.1"
 scipy = "1.13.0"
 mne = "1.6.1"
 
-[tool.poetry.dev-dependencies]
+[tool.poetry.group.dev.dependencies]
 pytest = "^8.1.1"
 black = "^24.3.0"
 mypy = "^1.9.0"
 ruff = "^0.3.0"
+python-semantic-release = "^9.4.0"
 
 [tool.poetry.group.extras.dependencies]
 seaborn = "^0.13.2"
@@ -58,6 +59,13 @@ warn_unused_configs = true
 module = ["scipy", "mne", "seaborn", "sdeint"]
 ignore_missing_imports = true
 
+[tool.semantic_release]
+version_variable = "pyPTE/__init__.py:__version__"
+branch = "main"
+upload_to_pypi = "false"
+
 [build-system]
 requires = ["poetry-core>=1.9"]
 build-backend = "poetry.core.masonry.api"
+
+
