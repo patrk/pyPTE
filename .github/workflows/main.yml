@@ -51,27 +51,27 @@ jobs:
       - name: Check code style
         run: poetry run ruff check
 
-    release:
-      needs: [run-tests, code-style-check, type-check]
-      runs-on: ubuntu-latest
-      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-      steps:
-        - uses: actions/checkout@v2
-          with:
-            fetch-depth: 0 
-        - name: Set up Python
-          uses: actions/setup-python@v2
-          with:
-            python-version: '3.12.2'
-        - name: Install Dependencies
-          run: |
-            pip install poetry
-            poetry install
-        - name: Semantic Release
-          run: poetry run semantic-release publish
-          env:
-            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-            #PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+  release:
+    needs: [run-tests, code-style-check, type-check]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0 
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.12.2'
+      - name: Install Dependencies
+        run: |
+          pip install poetry
+          poetry install
+      - name: Semantic Release
+        run: poetry run semantic-release publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          #PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
 
 
   # publish:
