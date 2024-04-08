@@ -14,10 +14,11 @@ Phase Transfer Entropy (PTE) is a measure for directed connectivity in networks 
 
 The mathematical formulation of PTE can be described as follows:
 
-Given two time series \(X\) and \(Y\), the PTE from \(X\) to \(Y\) is defined as:
+Given two time series $`X`$ and $`Y`$, the PTE is defined as:
 
-$$ PTE_{X \to Y} = H(Y_{t+1} | Y_t) - H(Y_{t+1} | Y_t, X_t) $$
-The PTE value quantifies the amount of uncertainty reduced in predicting the future phase of \(Y\) when considering the current phase of \(X\).
+$$PTE_{X \to Y} = H(Y_{t+1} | Y_t) - H(Y_{t+1} | Y_t, X_t)$$
+
+The PTE value quantifies the amount of uncertainty reduced in predicting the future phase of $`Y`$ when considering the current phase of $`X`$.
 
 ## Features
 
