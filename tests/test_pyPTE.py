@@ -4,6 +4,7 @@ from pyPTE.core.pyPTE import (
     PTE,
     compute_PTE,
     get_binsize,
+    get_delay,
     get_discretized_phase,
     get_phase,
 )
@@ -26,13 +27,27 @@ def test_get_discretized_phase():
         expected_discretized_phase,
         "Discretized phase did not match expected values.")
 
-def test_PTE_integration():
-    time_series = np.random.rand(5, 100)
+def test_function_shapes():
+    time_series = np.random.rand(4, 150)  # 4 channels, 150 samples
+
+    phase = get_phase(time_series)
+    assert phase.shape == (4, 150), "get_phase output shape mismatch"
+
+    delay = get_delay(phase)
+    assert isinstance(delay, int), "get_delay output should be an integer"
+
+    binsize = get_binsize(phase)
+    assert isinstance(binsize, float), "get_binsize output should be a float"
+
+    d_phase = get_discretized_phase(phase, binsize)
+    assert d_phase.shape == (4, 150), "get_discretized_phase output shape mismatch"
+
     dPTE, raw_PTE = PTE(time_series)
-    assert dPTE.shape == (5, 5), (
-        f"Expected dPTE shape (5, 5), got {dPTE.shape}")
-    assert raw_PTE.shape == (5, 5), (
-        f"Expected raw_PTE shape (5, 5), got {raw_PTE.shape}")
+    assert dPTE.shape == (4, 4),  (
+        f"Expected rawPTE shape (4, 4), got {dPTE.shape}")
+    assert raw_PTE.shape == (4, 4),  (
+        f"Expected dPTE shape (4, 4), got {dPTE.shape}")
+
 
 def test_PTE_with_independent_signals():
     signal_length = 1000
