@@ -45,7 +45,7 @@ def get_phase(time_series: npt.ArrayLike) -> npt.NDArray:
         m x n ndarray : m: number of channels, n: number of samples
     """
 
-    complex_series = hilbert(time_series, axis=0)
+    complex_series = hilbert(time_series, axis=1)
     phase = np.angle(complex_series)
     return phase
 
@@ -88,7 +88,7 @@ def get_binsize(phase: npt.NDArray, c: float = 3.49) -> float:
     """
 
     m, n = phase.shape
-    binsize = c * np.mean(np.std(phase, axis=0, ddof=1)) * n ** (-1.0 / 3)
+    binsize = c * np.mean(np.std(phase, axis=1, ddof=1)) * n ** (-1.0 / 3)
     return binsize
 
 
