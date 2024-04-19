@@ -138,9 +138,9 @@ def compute_PTE(phase: npt.NDArray, delay: int) -> npt.NDArray:
     for i in range(0, m):
         for j in range(0, m):
 
-            ypr = phase[delay:, j]
-            y = phase[:-delay, j]
-            x = phase[:-delay, i]
+            ypr = phase[j, delay:]
+            y = phase[j, :-delay]
+            x = phase[i, :-delay]
 
             P_y = np.zeros([y.max() + 1])
             np.add.at(P_y, [y], 1)
