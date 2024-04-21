@@ -64,6 +64,8 @@ version_variable = "pyPTE/__init__.py:__version__"
 upload_to_pypi = "false"
 [tool.semantic_release.branches.main]
 match = "(main)"
+[tool.semantic_release.remote.token]
+env = "GH_TOKEN"
 
 [build-system]
 requires = ["poetry-core>=1.9"]
