@@ -68,7 +68,7 @@ jobs:
           pip install poetry
           poetry install
       - name: Semantic Release
-        run: poetry run semantic-release publish --debug
+        run: poetry run semantic-release publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           #PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
