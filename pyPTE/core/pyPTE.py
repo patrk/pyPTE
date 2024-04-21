@@ -154,10 +154,10 @@ def compute_PTE(phase: npt.NDArray, delay: int) -> npt.NDArray:
             max_dim_ypr_y_x = max(ypr.max(), y.max(), x.max()) + 1
             P_ypr_y_x = np.zeros([max_dim_ypr_y_x, max_dim_ypr_y_x, max_dim_ypr_y_x])
 
-            P_y /= m - delay
-            P_ypr_y /= m - delay
-            P_y_x /= m - delay
-            P_ypr_y_x /= m - delay
+            P_y /= n - delay
+            P_ypr_y /= n - delay
+            P_y_x /= n - delay
+            P_ypr_y_x /= n - delay
 
             Hy = -np.nansum(np.multiply(P_y, np.log2(P_y)))
             Hypr_y = -np.nansum(np.nansum(np.multiply(P_ypr_y, np.log2(P_ypr_y))))
