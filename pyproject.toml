@@ -69,6 +69,11 @@ upload_to_release = true
 
 [tool.semantic_release.branches.main]
 match = "(main)"
+[tool.semantic_release.remote.token]
+env = "GH_TOKEN"
+
+[tool.semantic_release.remote.token]
+env = "GH_TOKEN"
 
 [tool.semantic_release.remote.token]
 env = "GH_TOKEN"
