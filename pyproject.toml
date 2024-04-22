@@ -75,9 +75,6 @@ env = "GH_TOKEN"
 [tool.semantic_release.remote.token]
 env = "GH_TOKEN"
 
-[tool.semantic_release.remote.token]
-env = "GH_TOKEN"
-
 [build-system]
 requires = ["poetry-core>=1.9"]
 build-backend = "poetry.core.masonry.api"
