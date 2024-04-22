@@ -60,10 +60,19 @@ module = ["scipy", "mne", "seaborn", "sdeint"]
 ignore_missing_imports = true
 
 [tool.semantic_release]
-version_variable = "pyPTE/__init__.py:__version__"
+version_variable = [
+    "src_folder/__init__.py:__version__",
+    "pyproject.toml:version"
+]
 upload_to_pypi = "false"
+upload_to_release = true
+build_command = "pip install poetry && poetry build"
+
 [tool.semantic_release.branches.main]
 match = "(main)"
+[tool.semantic_release.remote.token]
+env = "GH_TOKEN"
+
 [tool.semantic_release.remote.token]
 env = "GH_TOKEN"
 
