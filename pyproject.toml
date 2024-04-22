@@ -36,6 +36,9 @@ seaborn = "^0.13.2"
 matplotlib = "^3.8.4"
 sdeint = "^0.3.0"
 
+[[tool.poetry.packages]]
+include = "pyPTE/**/*"
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 
@@ -61,7 +64,7 @@ ignore_missing_imports = true
 
 [tool.semantic_release]
 version_variable = [
-    "src_folder/__init__.py:__version__",
+    "pyPTE/__init__.py:__version__",
     "pyproject.toml:version"
 ]
 upload_to_pypi = "false"
