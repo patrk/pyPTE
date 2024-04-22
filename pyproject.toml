@@ -66,15 +66,9 @@ version_variable = [
 ]
 upload_to_pypi = "false"
 upload_to_release = true
-build_command = "pip install poetry && poetry build"
 
 [tool.semantic_release.branches.main]
 match = "(main)"
-[tool.semantic_release.remote.token]
-env = "GH_TOKEN"
-
-[tool.semantic_release.remote.token]
-env = "GH_TOKEN"
 
 [build-system]
 requires = ["poetry-core>=1.9"]
