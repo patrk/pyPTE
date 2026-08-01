@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from pyPTE import PTE, group_contrast, group_test
+from pyPTE import PTE, cluster_permutation, group_contrast, group_test
 
 FS = 250.0
 
@@ -131,3 +131,95 @@ def test_summary_reports_the_method_and_count():
     result = group_contrast(matrices(20, 250, 0.9), matrices(20, 250, 0.0))
     assert "paired wilcoxon" in result.summary()
     assert "20 observations" in result.summary()
+
+
+# --------------------------------------------------------------------------
+# cluster_permutation
+# --------------------------------------------------------------------------
+
+
+def chain_epoch(n, coupling, seed):
+    """a -> b -> c -> d, so the true edges form one connected component."""
+    rng = np.random.default_rng(seed)
+    signals = [oscillator(rng, n) + 0.3 * rng.standard_normal(n)]
+    for _ in range(3):
+        signals.append(
+            coupling * np.roll(signals[-1], 10)
+            + max(1.0 - coupling, 0.0) * oscillator(rng, n)
+            + 0.3 * rng.standard_normal(n)
+        )
+    return np.vstack(signals)
+
+
+def chain_matrices(n_epochs, n_samples, coupling, offset=0):
+    return np.array(
+        [PTE(chain_epoch(n_samples, coupling, s + offset))[0] for s in range(n_epochs)]
+    )
+
+
+def test_cluster_finds_a_connected_chain():
+    result = cluster_permutation(
+        chain_matrices(40, 250, 0.9), n_permutations=200, seed=0
+    )
+
+    assert result.clusters, "a coupled chain should form at least one cluster"
+    assert result.cluster_p.min() < 0.05
+    assert result.significant.any()
+
+
+def test_cluster_is_calibrated_under_the_null():
+    """Independent signals should rarely produce a surviving cluster."""
+    hits = 0
+    for k in range(8):
+        data = chain_matrices(25, 250, 0.0, offset=k * 1000)
+        result = cluster_permutation(data, n_permutations=200, seed=k)
+        hits += bool(result.significant.any())
+
+    assert hits <= 2, f"false-positive rate looks miscalibrated: {hits}/8"
+
+
+def test_cluster_detects_a_paired_condition_difference():
+    result = cluster_permutation(
+        chain_matrices(30, 250, 0.9),
+        chain_matrices(30, 250, 0.0),
+        n_permutations=200,
+        seed=0,
+    )
+    assert result.significant.any()
+    assert result.cluster_p.min() < 0.05
+
+
+def test_cluster_p_values_are_bounded_away_from_zero():
+    n_permutations = 100
+    result = cluster_permutation(
+        chain_matrices(30, 250, 0.9), n_permutations=n_permutations, seed=0
+    )
+    assert (result.cluster_p >= 1.0 / (n_permutations + 1)).all()
+
+
+def test_stricter_threshold_yields_smaller_clusters():
+    data = chain_matrices(40, 250, 0.9)
+
+    lenient = cluster_permutation(data, threshold_p=0.05, n_permutations=100, seed=0)
+    strict = cluster_permutation(data, threshold_p=0.001, n_permutations=100, seed=0)
+
+    assert strict.threshold > lenient.threshold
+    assert strict.significant.sum() <= lenient.significant.sum()
+
+
+def test_cluster_reports_nothing_when_no_edge_passes_threshold():
+    flat = np.full((10, 4, 4), 0.5)
+    result = cluster_permutation(flat, n_permutations=50, seed=0)
+
+    assert result.clusters == []
+    assert not result.significant.any()
+    assert "no edges passed" in result.summary()
+
+
+def test_cluster_rejects_bad_input():
+    with pytest.raises(ValueError, match="n_observations"):
+        cluster_permutation(np.zeros((4, 4)), n_permutations=10)
+    with pytest.raises(ValueError, match="at least 2"):
+        cluster_permutation(np.zeros((1, 3, 3)), n_permutations=10)
+    with pytest.raises(ValueError, match="matching shapes"):
+        cluster_permutation(np.zeros((5, 3, 3)), np.zeros((4, 3, 3)), n_permutations=10)
