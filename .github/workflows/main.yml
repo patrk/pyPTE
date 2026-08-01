@@ -62,3 +62,53 @@ jobs:
         with:
           name: distributions
           path: dist/
+
+  release:
+    name: release
+    needs: [lint, test, build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pyPTE
+    permissions:
+      contents: write   # push the version bump commit, tag and GitHub release
+      id-token: write   # mint the short-lived PyPI token via OIDC
+    # a release must never be cancelled halfway through, unlike the check jobs
+    concurrency:
+      group: release-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v9
+        with:
+          enable-cache: true
+
+      # `build: false` because this action runs in a container without uv, so
+      # the configured build_command cannot execute here
+      - name: Determine and tag next version
+        id: release
+        uses: python-semantic-release/python-semantic-release@v10.6.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          git_committer_name: github-actions[bot]
+          git_committer_email: 41898282+github-actions[bot]@users.noreply.github.com
+          build: false
+
+      - name: Build distributions
+        if: steps.release.outputs.released == 'true'
+        run: uv build
+
+      - name: Publish to PyPI
+        if: steps.release.outputs.released == 'true'
+        uses: pypa/gh-action-pypi-publish@v1.14.2
+
+      - name: Attach distributions to the GitHub release
+        if: steps.release.outputs.released == 'true'
+        uses: python-semantic-release/publish-action@v10.6.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ steps.release.outputs.tag }}
