@@ -150,9 +150,14 @@ def test_raw_pte_respects_entropy_upper_bound():
 
 
 def test_self_transfer_entropy_is_zero():
-    """A channel predicts itself no better with itself as source."""
+    """A channel predicts itself no better with itself as source.
+
+    Asserted exactly rather than within a tolerance: self-transfer cancels
+    analytically, so the implementation is expected to skip the diagonal
+    outright instead of accumulating floating point noise on it.
+    """
     _, raw_PTE = PTE(coupled_pair(0))
-    np.testing.assert_allclose(np.diag(raw_PTE), 0.0, atol=1e-9)
+    np.testing.assert_array_equal(np.diag(raw_PTE), 0.0)
 
 
 def test_dpte_is_antisymmetric_about_half():
