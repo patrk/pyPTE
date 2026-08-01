@@ -224,3 +224,83 @@ def test_compute_PTE_counts_use_every_sample():
 
     assert np.isfinite(raw_PTE).all()
     assert (np.abs(raw_PTE) <= np.log2(n_bins)).all()
+
+
+# --------------------------------------------------------------------------
+# binning and delay rules
+# --------------------------------------------------------------------------
+
+
+def test_defaults_are_unchanged():
+    """The parameters must not move existing results."""
+    data = coupled_pair(0)
+    explicit = PTE(data, binning="scott", delay="zero-crossing")
+    np.testing.assert_array_equal(PTE(data)[0], explicit[0])
+    np.testing.assert_array_equal(PTE(data)[1], explicit[1])
+
+
+def test_hillebrand_binning_uses_more_bins_than_scott():
+    """The published rule is 3-4x finer, which is why it is not the default."""
+    from pyPTE.core.pyPTE import get_bincount_hillebrand
+
+    phase = get_phase(coupled_pair(0))
+    # the delay comes from the raw phase; binning uses the shifted copy
+    delay = get_delay(phase)
+    scott = get_bincount(get_binsize(phase + np.pi))
+    hillebrand = get_bincount_hillebrand(phase.shape[1], delay)
+
+    assert hillebrand > 2 * scott
+
+
+def test_binning_rules_agree_on_direction_but_not_magnitude():
+    """Both find the coupling; the finer histogram reports a smaller effect."""
+    data = coupled_pair(0)
+    scott = PTE(data, binning="scott")[0][0, 1]
+    hillebrand = PTE(data, binning="hillebrand")[0][0, 1]
+
+    assert scott > 0.5 and hillebrand > 0.5
+    assert scott > hillebrand
+
+
+def test_explicit_bin_count_is_honoured():
+    data = coupled_pair(0)
+    coarse = PTE(data, binning=8)[0][0, 1]
+    fine = PTE(data, binning=64)[0][0, 1]
+
+    assert coarse > 0.5 and fine > 0.5
+    assert not np.isclose(coarse, fine)
+
+
+def test_delay_rules_agree_on_a_narrowband_signal():
+    """A 10 Hz rhythm at 250 Hz has a half-period of 12.5 samples."""
+    t = np.arange(8000) / FS
+    phase = get_phase(np.vstack([np.sin(2 * np.pi * 10 * t)] * 2))
+
+    assert get_delay(phase, "zero-crossing") == pytest.approx(12.5, abs=1)
+    assert get_delay(phase, "phase-increment") == pytest.approx(12.5, abs=1)
+
+
+def test_explicit_delay_is_used_as_given():
+    data = coupled_pair(0)
+    phase = get_phase(data)
+    assert get_delay(phase, 25) == 25
+    assert PTE(data, delay=25)[0][0, 1] > 0.5
+
+
+def test_unusable_parameters_are_rejected():
+    data = coupled_pair(0, n=2000)
+
+    with pytest.raises(ValueError, match="at least 2 bins"):
+        PTE(data, binning=1)
+    with pytest.raises(ValueError, match="unknown binning rule"):
+        PTE(data, binning="sturges")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="at least 1"):
+        PTE(data, delay=0)
+    with pytest.raises(ValueError, match="unknown delay rule"):
+        PTE(data, delay="autocorrelation")  # type: ignore[arg-type]
+
+
+def test_a_signal_without_rhythm_is_rejected_rather_than_guessed():
+    flat = np.zeros((2, 500))
+    with pytest.raises(ValueError, match="no detectable rhythm|does not advance"):
+        get_delay(flat, "zero-crossing")

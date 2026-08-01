@@ -101,6 +101,34 @@ Filter to a band of interest **before** calling `PTE`. Phase is only meaningful
 for a reasonably narrowband signal, and the measure says nothing about which
 frequency an interaction lives at — that comes from how you filter.
 
+### The two free choices, and why they are parameters
+
+Steps 2 and 3 are not determined by the method, and both change the answer:
+
+```python
+PTE(signal, binning="scott", delay="zero-crossing")  # the defaults
+```
+
+**`binning`** accepts `"scott"` (default), `"hillebrand"`, or an integer bin
+count. Worth knowing: Hillebrand et al. 2016 specify
+`exp(0.626 + 0.4·ln(N_s − δ − 1))`, which is **3–4× more bins than Scott's rule**
+— 68 against 20 at 8,000 samples. pyPTE has always used Scott's rule, and that
+is kept as the default deliberately: at 68 bins the three-way histogram has
+314,000 cells for 8,000 samples and is hopelessly sparse, whereas Scott's rule
+holds roughly one sample per cell across a wide range of data lengths.
+
+It is not a cosmetic difference. On coupled signals Scott's rule reports
+`dPTE ≈ 0.68` where Hillebrand's reports `≈ 0.56`. Both agree on direction, and
+both sit at 0.5 when there is nothing to find, but the effect sizes are not
+comparable. Pass `binning="hillebrand"` to match the paper.
+
+**`delay`** accepts `"zero-crossing"` (default, and what Hillebrand specifies),
+`"phase-increment"`, or an integer. The two rules estimate the same quantity and
+agree within a sample on narrowband signals; they diverge on broadband or
+DC-offset signals, where neither is trustworthy. A signal containing several
+rhythms gives a delay tracking the fastest one, which is another reason to
+filter first.
+
 ## Running a real analysis
 
 Reporting raw `dPTE` values is the single most common way to get a wrong answer
