@@ -8,22 +8,26 @@ from pyPTE.core import pyPTE
 
 def kuramoto(omega_vector, K, N, sigma):
     def f(theta_vector, t):
-        #theta_vector = np.atleast_2d(theta_vector)
+        # theta_vector = np.atleast_2d(theta_vector)
         theta_vector = np.atleast_2d(theta_vector)
-        d_theta_vector = omega_vector + K/N * np.sum(
-            np.sin(theta_vector - theta_vector.T), 1)
+        d_theta_vector = omega_vector + K / N * np.sum(
+            np.sin(theta_vector - theta_vector.T), 1
+        )
         p = np.random.normal(0, sigma, N)
         return d_theta_vector + p
+
     def G(v, t):
-        return np.diag(np.ones(N)*sigma)
+        return np.diag(np.ones(N) * sigma)
+
     return f, G
+
 
 theta0 = np.array([100.0, 50.0, 0.0])
 theta0 = np.arange(0, 10, 1)
 print(theta0)
 omega = np.array([8, 8, 8])
 # omega = np.arange(0, 10, 0.1)
-omega = np.ones_like(theta0)*8
+omega = np.ones_like(theta0) * 8
 
 f, G = kuramoto(omega, 1, 10, 0.1)
 
@@ -34,15 +38,12 @@ solution = itoint(f, G, theta0, tspan)
 plt.plot(tspan, solution)
 plt.show()
 
-solution = np.mod(solution, 2*np.pi)
+solution = np.mod(solution, 2 * np.pi)
 solution -= np.pi
-
-
 
 
 plt.plot(tspan, solution)
 plt.show()
-
 
 
 # phase = np.swapaxes(solution, 0, 1)
@@ -78,7 +79,3 @@ plt.show()
 # bins_w = np.arange(0, 2*np.pi, binsize)
 # Nbins = len(bins_w)
 # print compute_PTE(phase, delay, Nbins, L, N)
-
-
-
-

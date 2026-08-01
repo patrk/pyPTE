@@ -2,47 +2,39 @@ ci:
   skip: [pytest]
 
 default_language_version:
-  python: python3.12
+  python: python3.11
 
 repos:
   # general checks (see here: https://pre-commit.com/hooks.html)
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v6.0.0
     hooks:
       - id: check-yaml
         args: [--allow-multiple-documents]
+      - id: check-toml
       - id: end-of-file-fixer
       - id: trailing-whitespace
 
-  # black - formatting
-  - repo: https://github.com/psf/black
-    rev: 24.2.0
-    hooks:
-      - id: black
-        name: black
-        args:
-          - "--config"
-          - "./pyproject.toml"
-
-  # ruff - linting
+  # ruff - linting and formatting (replaces black)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: "v0.3.0"
+    rev: v0.16.1
     hooks:
-      - id: ruff
-        name: ruff
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
 
   # mypy - lint-like type checking
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.8.0
+    rev: v1.18.2
     hooks:
       - id: mypy
-        name: mypy
+        additional_dependencies: [numpy, scipy]
 
   - repo: local
     hooks:
       - id: pytest
         name: pytest
-        entry: poetry run pytest --cov=src tests
+        entry: uv run pytest
         language: system
         types: [python]
         pass_filenames: false

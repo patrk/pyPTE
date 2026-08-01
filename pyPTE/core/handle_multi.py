@@ -1,13 +1,14 @@
 from multiprocessing import Pool, cpu_count
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import numpy.typing as npt
 
 from pyPTE.core import pyPTE
 
 
-def _PTE_process(item: Tuple[Any, npt.ArrayLike]) ->(
-        Dict[Any, Tuple[npt.NDArray, npt.NDArray]]):
+def _PTE_process(
+    item: tuple[Any, npt.ArrayLike],
+) -> dict[Any, tuple[npt.NDArray, npt.NDArray]]:
     """
     Multi processing pool worker for PTE computation - wraps PTE method
 
@@ -30,8 +31,9 @@ def _PTE_process(item: Tuple[Any, npt.ArrayLike]) ->(
     return result
 
 
-def multi_process(measurements: Dict[Any, npt.ArrayLike]) -> (
-        List[Dict[Any, Tuple[npt.NDArray, npt.NDArray]]]):
+def multi_process(
+    measurements: dict[Any, npt.ArrayLike],
+) -> list[dict[Any, tuple[npt.NDArray, npt.NDArray]]]:
     """
 
     Parameters
