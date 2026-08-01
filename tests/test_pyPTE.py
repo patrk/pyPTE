@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+import pyPTE
 from pyPTE.core.pyPTE import (
     PTE,
     compute_PTE,
@@ -31,6 +32,17 @@ def coupled_pair(seed=0, n=8000, lag=12, freq=10.0, flip=False):
 def independent_pair(seed=0, n=8000):
     rng = np.random.default_rng(seed)
     return rng.standard_normal((2, n))
+
+
+# --------------------------------------------------------------------------
+# public interface
+# --------------------------------------------------------------------------
+
+
+def test_PTE_is_exported_at_package_root():
+    """`from pyPTE import PTE` is the documented entry point."""
+    assert pyPTE.PTE is PTE
+    assert "PTE" in pyPTE.__all__
 
 
 # --------------------------------------------------------------------------

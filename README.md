@@ -27,7 +27,7 @@ entry `[i, j]` describes information flow from channel `i` to channel `j`.
 
 ```python
 import numpy as np
-from pyPTE.core.pyPTE import PTE
+from pyPTE import PTE
 
 rng = np.random.default_rng(0)
 t = np.arange(8000) / 250.0
