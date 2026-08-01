@@ -37,6 +37,7 @@ def independent_pair(seed=0, n=8000):
 # building blocks
 # --------------------------------------------------------------------------
 
+
 def test_get_phase_zeros_input():
     time_series = np.array([[0, 0, 0], [0, 0, 0]])
     np.testing.assert_almost_equal(
@@ -77,6 +78,7 @@ def test_function_shapes():
 # --------------------------------------------------------------------------
 # directionality - the reason this library exists
 # --------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("seed", range(5))
 def test_pte_detects_coupling_direction(seed):
@@ -125,6 +127,7 @@ def test_chain_recovers_indirect_direction():
 # --------------------------------------------------------------------------
 # information-theoretic invariants
 # --------------------------------------------------------------------------
+
 
 def test_raw_pte_is_non_negative():
     """PTE is a conditional mutual information, so it cannot be negative."""

@@ -1,80 +1,106 @@
-[tool.poetry]
+[project]
 name = "pyPTE"
 version = "0.1.0"
-description = "Pythonic implementation of the Phase Transfer Entropy using NumPy and SciPy"
-authors = ["Patryk Mikulski"]  
-license = "GPL-3.0-or-later"
+description = "Phase Transfer Entropy for directed connectivity analysis, built on NumPy and SciPy"
 readme = "README.md"
-keywords = ["PTE", "phase transfer entropy", "neuroscience", "signal processing"]
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+authors = [{ name = "Patryk Mikulski" }]
+requires-python = ">=3.11"
+keywords = [
+    "PTE",
+    "phase transfer entropy",
+    "directed connectivity",
+    "neuroscience",
+    "EEG",
+    "MEG",
+    "signal processing",
+]
 classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering",
+    "Typing :: Typed",
 ]
 
-[tool.poetry.dependencies]
-python = "3.12.2"  
-numpy = "1.26.4"
-pandas = "2.2.1"
-scipy = "1.13.0"
-mne = "1.6.1"
+# Deliberately unpinned at the top end: pyPTE is a library and has to resolve
+# alongside whatever numpy/scipy the rest of a scientific environment needs.
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+]
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.1.1"
-black = "^24.3.0"
-mypy = "^1.9.0"
-ruff = "^0.3.0"
-python-semantic-release = "^9.4.0"
+[project.optional-dependencies]
+pandas = ["pandas>=2.0"]
+mne = ["mne>=1.6", "pandas>=2.0"]
 
-[tool.poetry.group.extras.dependencies]
-seaborn = "^0.13.2"
-matplotlib = "^3.8.4"
-sdeint = "^0.3.0"
+[project.urls]
+Homepage = "https://github.com/patrk/pyPTE"
+Repository = "https://github.com/patrk/pyPTE"
+Issues = "https://github.com/patrk/pyPTE/issues"
+Changelog = "https://github.com/patrk/pyPTE/blob/main/CHANGELOG.md"
 
-[[tool.poetry.packages]]
-include = "pyPTE/**/*"
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-cov>=5",
+    "mypy>=1.9",
+    "ruff>=0.6",
+    "python-semantic-release>=9",
+]
+examples = [
+    "matplotlib>=3.8",
+    "seaborn>=0.13",
+    "sdeint>=0.3",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pyPTE"]
+
+[tool.hatch.build.targets.sdist]
+include = ["pyPTE", "tests", "README.md", "LICENSE", "CHANGELOG.md"]
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
 
 [tool.ruff]
-  line-length = 88
-  # pyflakes, pycodestyle, isort
-  select = ["F", "E", "W", "I001"]
-
-[tool.black]
 line-length = 88
-target-version = ['py312']
+target-version = "py311"
+
+[tool.ruff.lint]
+# pyflakes, pycodestyle, isort, pyupgrade, bugbear
+select = ["F", "E", "W", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pyPTE"]
 
 [tool.mypy]
+# no python_version pin: numpy's bundled stubs use PEP 695 syntax that mypy
+# only parses when targeting 3.12+, so this follows the interpreter instead.
+# Real 3.11 compatibility is covered by the test matrix, which runs the code.
 check_untyped_defs = true
 ignore_missing_imports = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 warn_unused_configs = true
 
-[[tool.mypy.overrides]]
-module = ["scipy", "mne", "seaborn", "sdeint"]
-ignore_missing_imports = true
-
 [tool.semantic_release]
-version_variable = [
-    "pyPTE/__init__.py:__version__",
-    "pyproject.toml:version"
-]
-upload_to_pypi = "false"
-upload_to_release = true
+version_toml = ["pyproject.toml:project.version"]
+version_variables = ["pyPTE/__init__.py:__version__"]
+build_command = "uv build"
 
 [tool.semantic_release.branches.main]
-match = "(main)"
+match = "main"
 
-[build-system]
-requires = ["poetry-core>=1.9"]
-build-backend = "poetry.core.masonry.api"
-
-
+[tool.semantic_release.publish]
+upload_to_vcs_release = true

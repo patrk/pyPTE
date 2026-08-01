@@ -1,5 +1,3 @@
-from typing import Tuple
-
 import numpy as np
 import numpy.typing as npt
 from scipy.signal import hilbert
@@ -206,7 +204,7 @@ def compute_PTE(phase: npt.NDArray, delay: int) -> npt.NDArray:
 
 def compute_dPTE_rawPTE(
     phase: npt.NDArray, delay: int
-) -> Tuple[npt.NDArray, npt.NDArray]:
+) -> tuple[npt.NDArray, npt.NDArray]:
     """
     This function calls pyPTE.pyPTE.compute_PTE to obtain a PTE matrix and performs a
     normalization yielding dPTE to easily investigate directionality information.
@@ -238,7 +236,7 @@ def compute_dPTE_rawPTE(
     return dPTE, raw_PTE
 
 
-def PTE(time_series: npt.ArrayLike) -> Tuple[npt.NDArray, npt.NDArray]:
+def PTE(time_series: npt.ArrayLike) -> tuple[npt.NDArray, npt.NDArray]:
     """
     This function performs the whole procedure of calculating the PTE:
     1. Compute the phase by applying the Hilbert transform on the time-series and
