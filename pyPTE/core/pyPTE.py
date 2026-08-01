@@ -110,6 +110,34 @@ def get_bincount(binsize: float) -> int:
     return bincount
 
 
+def _entropy(codes: npt.NDArray, n_samples: int) -> float:
+    """
+    Shannon entropy in bits of a discrete variable given its integer states
+
+    Counting pre-encoded joint states with numpy.bincount avoids materialising
+    a dense histogram over the full product space, which for the three-way term
+    grows with the cube of the number of phase bins while staying almost
+    entirely empty.
+
+    Parameters
+    ----------
+    codes : numpy.ndarray
+        1-d array of non-negative integers, one state per sample
+    n_samples : int
+        number of samples the states were drawn from
+
+    Returns
+    -------
+    entropy : float
+
+    """
+    counts = np.bincount(codes)
+    counts = counts[counts > 0]
+    # -sum(p*log2(p)) with p = c/n, rearranged so no division happens per bin
+    # and empty bins are dropped before the logarithm rather than after
+    return float(np.log2(n_samples) - (counts * np.log2(counts)).sum() / n_samples)
+
+
 def compute_PTE(phase: npt.NDArray, delay: int) -> npt.NDArray:
     """
     For each channel pair (x, y) containing the individual discretized phase,
@@ -117,6 +145,10 @@ def compute_PTE(phase: npt.NDArray, delay: int) -> npt.NDArray:
     this function performs the entropy estimation by counting the occurences of
     phase values in x, y and y_predicted, which is achieved by slicing the x, y
     to consider delay x samples in the past and delay samples in the future.
+
+    Joint states are packed into a single integer per sample, treating the
+    phase bin of each variable as one digit in base n_bins, so every entropy
+    reduces to a one-dimensional bincount.
 
     Parameters
     ----------
@@ -133,43 +165,42 @@ def compute_PTE(phase: npt.NDArray, delay: int) -> npt.NDArray:
         m x m matrix containing the PTE value for each channel pair
     """
     m, n = phase.shape
+    n_samples = n - delay
+    n_bins = int(phase.max()) + 1
+
+    # int64 keeps the three-digit code below the overflow limit for the bin
+    # counts Scott's rule produces on realistically long recordings
+    ypr_all = phase[:, delay:].astype(np.int64)
+    y_all = phase[:, :-delay].astype(np.int64)
+
     PTE = np.zeros((m, m), dtype=float)
 
-    for i in range(0, m):
-        for j in range(0, m):
+    # the target channel drives the outer loop because H(y) and H(ypr, y)
+    # depend on it alone, so they are computed m times rather than m * m
+    for j in range(m):
+        y = y_all[j]
+        ypr = ypr_all[j]
 
-            ypr = phase[j, delay:]
-            y = phase[j, :-delay]
-            x = phase[i, :-delay]
+        Hy = _entropy(y, n_samples)
+        Hypr_y = _entropy(ypr * n_bins + y, n_samples)
 
-            # NOTE: the index must be a tuple. NumPy >= 1.23 treats a *list*
-            # index as a single fancy-index array into axis 0 rather than as a
-            # per-axis index, which silently inflates the joint counts.
-            P_y = np.zeros(y.max() + 1)
-            np.add.at(P_y, y, 1)
+        # the source occupies the least significant digit, so everything above
+        # it can be shifted once here and reused for every source channel
+        y_shifted = y * n_bins
+        ypr_y_shifted = (ypr * n_bins + y) * n_bins
 
-            P_ypr_y = np.zeros((ypr.max() + 1, y.max() + 1))
-            np.add.at(P_ypr_y, (ypr, y), 1)
+        for i in range(m):
+            if i == j:
+                # self-transfer cancels exactly, since H(y, y) == H(y) and
+                # H(ypr, y, y) == H(ypr, y)
+                continue
 
-            P_y_x = np.zeros((y.max() + 1, x.max() + 1))
-            np.add.at(P_y_x, (y, x), 1)
-
-            P_ypr_y_x = np.zeros((ypr.max() + 1, y.max() + 1, x.max() + 1))
-            np.add.at(P_ypr_y_x, (ypr, y, x), 1)
-
-            P_y /= n - delay
-            P_ypr_y /= n - delay
-            P_y_x /= n - delay
-            P_ypr_y_x /= n - delay
-
-            # empty bins give 0 * log2(0) -> nan, which nansum drops
-            with np.errstate(divide="ignore", invalid="ignore"):
-                Hy = -np.nansum(P_y * np.log2(P_y))
-                Hypr_y = -np.nansum(P_ypr_y * np.log2(P_ypr_y))
-                Hy_x = -np.nansum(P_y_x * np.log2(P_y_x))
-                Hypr_y_x = -np.nansum(P_ypr_y_x * np.log2(P_ypr_y_x))
+            x = y_all[i]
+            Hy_x = _entropy(y_shifted + x, n_samples)
+            Hypr_y_x = _entropy(ypr_y_shifted + x, n_samples)
 
             PTE[i, j] = Hypr_y + Hy_x - Hy - Hypr_y_x
+
     return PTE
 
 
