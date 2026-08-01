@@ -4,11 +4,9 @@ Two ground-truth topologies are simulated with delayed Kuramoto oscillators:
 a directed ring, where every node drives its successor, and two internally
 dense groups joined by a single one-way bridge.
 
-The comparison is deliberately unfair to pyPTE in one respect. Ground truth is
-sparse, while dPTE assigns a value to every one of the m*m ordered pairs, so the
-recovered matrix is dense by construction. Rather than hide that behind a
-hand-picked threshold, the score reported here is AUC: the probability that a
-true edge outranks a non-edge, which needs no threshold at all.
+Ground truth is sparse but dPTE gives every ordered pair a value, so the
+recovered matrix is dense no matter what. Scored with AUC rather than a
+hand-picked threshold: the chance a true edge outranks a non-edge.
 
 Run with:
     uv run python -m examples.kuramoto_network [--quick]

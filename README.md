@@ -237,6 +237,22 @@ will penalise it for being right.
 
 → [`kuramoto_network.py`](examples/kuramoto_network.py)
 
+### On a real connectome, structural recovery largely fails
+
+Against The Virtual Brain's directed 76-region tract-tracing connectome, pyPTE
+separates one-way edges from unconnected pairs at **AUC 0.62** — above chance,
+but far from the 0.96–1.00 the same estimator reaches on sparse synthetic
+networks. At 27% density nearly every region pair is joined by a short indirect
+path, which is the previous caveat operating at whole-brain scale.
+
+Scale bites twice. With `m` regions there are `m * (m - 1)` pairs — 5,700 here —
+so the strictest FDR threshold falls below `1e-5`, while `N` surrogates cannot
+produce a p-value below `1 / (N + 1)`. Edgewise surrogate testing at this scale
+needs thousands of surrogates; `cluster_permutation` is the practical
+alternative.
+
+→ [`tvb_connectome.py`](examples/tvb_connectome.py)
+
 ### Detection is model-dependent
 
 There is no universal sample requirement. Phase oscillators resolve in a few
@@ -274,6 +290,7 @@ uv run python -m examples.two_node_coupling      # add --quick for a faster run
 | [`neural_mass_network`](examples/neural_mass_network.py) | recording length vs precision, on Jansen-Rit columns |
 | [`significance_testing`](examples/significance_testing.py) | what a surrogate test does, drawn out |
 | [`epoched_analysis`](examples/epoched_analysis.py) | full epoched two-condition pipeline |
+| [`tvb_connectome`](examples/tvb_connectome.py) | a real directed connectome, where recovery mostly fails |
 
 See [`examples/README.md`](examples/README.md) for details.
 
@@ -308,24 +325,26 @@ these are the simulators worth knowing about:
   the one worth reaching for first. It ships a genuinely **directed** 76-region
   connectome from tract-tracing rather than a symmetric DTI matrix, which is
   what a directional measure needs as ground truth, plus ~30 population models
-  and EEG/MEG forward monitors that produce sensor-level signals.
-  Sanz Leon et al., *Front. Neuroinform.* 7:10 (2013).
+  and EEG/MEG forward monitors. Sanz Leon et al., *Front. Neuroinform.* 7:10
+  (2013).
+  → **[`examples/tvb_connectome.py`](examples/tvb_connectome.py)** runs pyPTE
+  against that connectome, and is the most informative example here because the
+  result is largely negative.
 - **[PyRates](https://github.com/pyrates-neuroscience/PyRates)** (GPL-3.0) — a
   much smaller dependency footprint, with explicit per-edge directed coupling
-  and delays. No bundled connectome, so you supply the topology.
-  Gast et al., *PLOS ONE* 14(12):e0225900 (2019).
+  and delays. No bundled connectome, so you supply the topology, which is what
+  the self-contained models here already do; the gain over them is citability
+  rather than capability. Gast et al., *PLOS ONE* 14(12):e0225900 (2019).
 - [neurolib](https://github.com/neurolib-dev/neurolib) (MIT) — whole-brain
-  modelling with several neural mass models. Note its bundled HCP connectome is
-  symmetric, so it carries no net direction to recover, and the project has seen
-  little activity since late 2024.
+  modelling with several neural mass models. **No example here**, deliberately:
+  its bundled HCP connectome is symmetric, so it carries no net direction for a
+  directional measure to recover, and the project has had little activity since
+  December 2024.
 - [brainmass](https://github.com/chaobrain/brainmass) (Apache-2.0), part of the
   [BrainX](https://brainx.chaobrain.com/) ecosystem — differentiable neural mass
-  models on JAX. Early-stage, with a correspondingly heavy dependency chain.
-
-Related tooling for neural-mass-based EEG analysis, solving a different problem
-(parameter estimation rather than connectivity): **EIREstimator**, Yi & Yang,
-*Neurocomputing* 697:134235 (2026),
-[doi:10.1016/j.neucom.2026.134235](https://doi.org/10.1016/j.neucom.2026.134235).
+  models on JAX. **No example here**, deliberately: at v0.1.1 the API is still
+  moving, and it pulls in the whole JAX stack for a demonstration the models
+  above already provide.
 
 `pyPTE` depends on none of them.
 

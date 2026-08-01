@@ -1,14 +1,13 @@
 """Does pyPTE recover the direction of a known one-way coupling?
 
-The simplest possible ground truth: one oscillator drives a second with a fixed
-lag, and nothing flows back. Sweeping the coupling strength and the lag shows
-what dPTE does as the true influence grows, and confirms it sits at the
-no-preference value of 0.5 when the two signals are independent.
+The simplest ground truth there is: one oscillator drives a second with a fixed
+lag and nothing flows back. Sweeps coupling strength and lag, and checks that
+dPTE sits at 0.5 when the two are independent.
 
-The last panel is the counterweight. Two *independent* oscillators that differ
-only in signal-to-noise ratio produce a large spurious dPTE, because the noisier
-channel is less predictable from its own past. Read directionality from raw dPTE
-alone and unequal SNR will look exactly like coupling.
+The last panel is the catch. Two independent oscillators that differ only in
+signal-to-noise ratio produce a large spurious dPTE, because the noisier channel
+is harder to predict from its own past. Read raw dPTE on its own and an SNR gap
+looks just like coupling.
 
 Run with:
     uv run python -m examples.two_node_coupling [--quick]

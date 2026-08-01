@@ -1,18 +1,10 @@
 """What a significance test actually does to a dPTE matrix.
 
-The other examples use `surrogate_test` and report what survives. This one
-opens it up, because the mechanism is the part worth trusting or distrusting.
-
-Three channels are simulated:
-
-    A  drives C, genuinely, with a lag
-    B  is independent of everything, but far noisier than A
-    C  is driven by A
-
-Read the raw dPTE matrix and both A -> C and A -> B look like findings. Only
-one of them is. The difference is invisible in the matrix and obvious against
-the null: A -> B sits comfortably inside its own surrogate distribution, while
-A -> C sits outside it.
+Three channels: A really drives C with a lag, B is independent of everything but
+much noisier. In the raw matrix both A -> C and A -> B look like findings, and
+the artefact is the stronger of the two. Against their own nulls they separate
+cleanly, because B's noise raises its surrogate distribution just as much as it
+raises the observed value.
 
 Run with:
     uv run python -m examples.significance_testing [--quick]

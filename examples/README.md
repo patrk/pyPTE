@@ -86,6 +86,35 @@ one-hop links exist:
 dPTE rises with path length, so ranking pairs by it returns close to the inverse
 of the true network. pyPTE recovers the flow, not the wiring.
 
+### 6. `tvb_connectome.py` — the same question on real anatomy
+
+Everything above builds its own ground truth. This one uses The Virtual Brain's
+bundled 76-region connectome, derived from tract-tracing rather than diffusion
+imaging, so the directionality is genuine anatomy: 268 of its 1,560 edges exist
+in one direction only, while tract lengths are correctly symmetric.
+
+The result is largely negative, which is why it is worth running. pyPTE
+separates one-way edges from unconnected pairs at **AUC 0.62**, against 0.96–1.00
+for the sparse synthetic networks above. At 27% density nearly every region pair
+is joined by a short indirect path — the same limitation as example 5, at whole-
+brain scale.
+
+It also runs into an arithmetic wall: 5,700 ordered pairs put the strictest FDR
+threshold below `1e-5`, while `N` surrogates cannot yield a p-value below
+`1 / (N + 1)`, so nothing survives edgewise testing at a practical surrogate
+count. Use `cluster_permutation` at this scale.
+
+Needs the optional TVB group, which is kept separate because `tvb-data` is a
+~50 MB download:
+
+```bash
+uv sync --group examples --group tvb
+uv run python -m examples.tvb_connectome
+```
+
+Note that TVB's `JansenRit` diverges to NaN on this connectome at default
+coupling, so the example uses `Generic2dOscillator`.
+
 ## Shared code
 
 - `models/kuramoto.py` — delayed Kuramoto oscillators with arbitrary directed
