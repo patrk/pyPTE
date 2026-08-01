@@ -154,6 +154,22 @@ def test_p_values_are_bounded_away_from_zero():
     assert (result.p_values <= 1.0).all()
 
 
+def test_null_distribution_is_optional():
+    data = coupled_pair(n=2000)
+
+    without = surrogate_test(data, n_surrogates=10, seed=0)
+    assert without.null_distribution is None
+
+    with_null = surrogate_test(data, n_surrogates=10, seed=0, keep_null=True)
+    assert with_null.null_distribution is not None
+    assert with_null.null_distribution.shape == (10, 2, 2)
+    # the retained surrogates must be the ones the summary statistics came from
+    np.testing.assert_allclose(
+        with_null.null_distribution.mean(axis=0), with_null.null_mean
+    )
+    np.testing.assert_allclose(with_null.p_values, without.p_values)
+
+
 def test_seed_makes_it_reproducible():
     data = coupled_pair()
     first = surrogate_test(data, n_surrogates=20, seed=42)
