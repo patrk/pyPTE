@@ -1,30 +1,108 @@
+from typing import Literal
+
 import numpy as np
 import numpy.typing as npt
 from scipy.signal import hilbert
 
+BinningRule = Literal["scott", "hillebrand"] | int
+DelayRule = Literal["zero-crossing", "phase-increment"] | int
 
-def get_delay(phase: npt.NDArray) -> int:
+
+def get_delay(phase: npt.NDArray, rule: DelayRule = "zero-crossing") -> int:
     """
-    Computes the overall delay for a all given channels
+    Estimates the analysis lag, in samples, from the rhythm of the signal
+
+    Both rules estimate the same quantity, half the dominant period, and on a
+    narrowband signal they agree to within a sample: for a 10 Hz rhythm at
+    250 Hz they return 12 and 13 against a true half-period of 12.5.
+
+    They diverge where the phase itself is poorly defined. On a signal with a
+    large DC offset the mean rate of phase advance is badly misled while sign
+    counting is not, and on broadband or 1/f signals the two can differ by more
+    than a factor of two. Neither is trustworthy there, which is the argument
+    for band-pass filtering before estimating anything.
+
+    Note also that a signal containing several rhythms yields a delay tracking
+    the fastest of them, not the one of interest.
 
     Parameters
     ----------
     phase : numpy.ndarray
         m x n ndarray : m: number of channels, n: number of samples
+    rule : {"zero-crossing", "phase-increment"} or int
+        "zero-crossing" counts sign changes across every channel, as in
+        Hillebrand et al. 2016, and is the default so results stay comparable.
+        "phase-increment" derives the period from how fast the phase advances.
+        An integer is taken as the delay itself and returned unchanged.
 
     Returns
     -------
     delay : int
-    """
-    phase = phase
-    m, n = phase.shape
-    c1 = n * m
-    r_phase = np.roll(phase, 1, axis=1)
-    phase_product = np.multiply(phase, r_phase)
-    c2 = (phase_product < 0).sum()
-    delay = int(np.round(c1 / c2))
+        at least 1, since a delay of zero would compare a sample with itself
 
-    return delay
+    Raises
+    ------
+    ValueError
+        if the signal has no detectable rhythm, so no lag can be estimated
+    """
+    if isinstance(rule, (int, np.integer)):
+        if rule < 1:
+            raise ValueError(f"an explicit delay must be at least 1, got {rule}")
+        return int(rule)
+
+    m, n = phase.shape
+
+    if rule == "zero-crossing":
+        # compare each sample with its predecessor, excluding the wrap-around
+        # pair that np.roll would otherwise introduce at the start of each channel
+        crossings = int((phase[:, 1:] * phase[:, :-1] < 0).sum())
+        if crossings == 0:
+            raise ValueError(
+                "no zero crossings found, so the signal has no detectable rhythm; "
+                "pass an explicit delay or band-pass filter first"
+            )
+        return max(int(np.round(n * m / crossings)), 1)
+
+    if rule == "phase-increment":
+        # unwrap so the phase advances monotonically, then read off the mean
+        # rate; 2*pi over that rate is the period in samples
+        advance = np.diff(np.unwrap(phase, axis=1), axis=1)
+        mean_advance = float(np.abs(advance).mean())
+        if mean_advance <= 0.0:
+            raise ValueError(
+                "the phase does not advance, so no period can be estimated; "
+                "pass an explicit delay or band-pass filter first"
+            )
+        return max(int(np.round(np.pi / mean_advance)), 1)
+
+    raise ValueError(f"unknown delay rule {rule!r}")
+
+
+def get_bincount_hillebrand(n_samples: int, delay: int) -> int:
+    """
+    Bin count as specified by Hillebrand et al. 2016
+
+    Their rule is ``exp(0.626 + 0.4 * ln(n_samples - delay - 1))``, which yields
+    three to four times more bins than Scott's rule at the same sample count.
+    That leaves the three-way histogram very sparsely populated, so pyPTE uses
+    Scott's rule by default; this is provided for comparison with the paper.
+
+    Parameters
+    ----------
+    n_samples : int
+    delay : int
+
+    Returns
+    -------
+    bincount : int
+    """
+    usable = n_samples - delay - 1
+    if usable < 1:
+        raise ValueError(
+            f"need more than delay + 1 samples to bin, got {n_samples} with "
+            f"delay {delay}"
+        )
+    return max(int(round(np.exp(0.626 + 0.4 * np.log(usable)))), 2)
 
 
 def get_phase(time_series: npt.ArrayLike) -> npt.NDArray:
@@ -236,33 +314,62 @@ def compute_dPTE_rawPTE(
     return dPTE, raw_PTE
 
 
-def PTE(time_series: npt.ArrayLike) -> tuple[npt.NDArray, npt.NDArray]:
+def PTE(
+    time_series: npt.ArrayLike,
+    *,
+    binning: BinningRule = "scott",
+    delay: DelayRule = "zero-crossing",
+) -> tuple[npt.NDArray, npt.NDArray]:
     """
-    This function performs the whole procedure of calculating the PTE:
-    1. Compute the phase by applying the Hilbert transform on the time-series and
-    calculate the angle between the real and imaginary part.
-    The phase is defined on the interval [-pi, pi[
+    Computes dPTE and raw PTE for every ordered channel pair
+
+    The procedure is:
+    1. Compute the phase with a Hilbert transform, on the interval [-pi, pi[
     2. Estimate the analysis delay
-    3. For binning, shift the phase along the ordinate so there are no negatives values
-    4. Calculate the binsize in number of samples
-    5. Bin the phase data
-    6. Compute the dPTE and raw_PTE
+    3. Shift the phase so there are no negative values, then bin it
+    4. Count joint states and combine the entropies
+
+    Both free choices in that procedure are exposed, because neither is
+    obviously correct and they change the answer. Wider bins give a
+    better-populated histogram and a larger apparent effect; the delay sets
+    which lag the measure is sensitive to.
 
     Parameters
     ----------
     time_series : numpy.ndarray
         m x n ndarray : m: number of channels, n: number of samples
+    binning : {"scott", "hillebrand"} or int
+        "scott" sizes bins by Scott's rule, the default, which keeps roughly one
+        sample per histogram cell across a wide range of data lengths.
+        "hillebrand" uses the bin count published in Hillebrand et al. 2016,
+        which is three to four times larger and correspondingly sparser.
+        An integer sets the number of bins over [0, 2*pi] directly.
+    delay : {"zero-crossing", "phase-increment"} or int
+        passed to pyPTE.core.pyPTE.get_delay; an integer is used as-is
 
     Returns
     -------
     (dPTE, raw_PTE) : tuple of numpy.ndarray objects
-        dPTE : normalized PTE matrix, raw_PTE: original PTE values
+        dPTE : normalized PTE matrix, raw_PTE : PTE in bits. Entry [i, j]
+        describes information flow from channel i to channel j.
 
     """
     phase = get_phase(time_series)
-    delay = get_delay(phase)
-    phase_inc = phase + np.pi
-    binsize = get_binsize(phase_inc)
-    d_phase = get_discretized_phase(phase_inc, binsize)
+    analysis_delay = get_delay(phase, delay)
 
-    return compute_dPTE_rawPTE(d_phase, delay)
+    phase_inc = phase + np.pi
+    n_samples = phase_inc.shape[1]
+
+    if isinstance(binning, (int, np.integer)):
+        if binning < 2:
+            raise ValueError(f"binning needs at least 2 bins, got {binning}")
+        binsize = 2 * np.pi / int(binning)
+    elif binning == "scott":
+        binsize = get_binsize(phase_inc)
+    elif binning == "hillebrand":
+        binsize = 2 * np.pi / get_bincount_hillebrand(n_samples, analysis_delay)
+    else:
+        raise ValueError(f"unknown binning rule {binning!r}")
+
+    d_phase = get_discretized_phase(phase_inc, binsize)
+    return compute_dPTE_rawPTE(d_phase, analysis_delay)
