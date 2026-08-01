@@ -1,67 +1,97 @@
-from pandas_adapter import PTE_from_dataframe
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+from pyPTE.core import pyPTE
 
 
-def interpolate_mne(raw, raw_reference):
+def interpolate_mne(raw: Any, raw_reference: Any) -> Any:
     """
-    This is a utility function which circumvents the issue that MNE allows to
-    interpolate only channels, which are present and marked as bad channels.
-    Missing channels in a raw file can be interpolated by passing the mne.io.Raw object
-    subject to interpolation and a reference object which contains all channels.
-    This is achieved by copying channels, replacing its channel information by
-    the reference channels, marking it as bad and finally utilizing
-    mne.io.Raw.interpolate_bads()
+    Restores channels missing from a recording by interpolating them
+
+    MNE can only interpolate channels that are present and marked as bad, so a
+    recording that is missing channels outright cannot be repaired directly.
+    This function inserts the missing channels as silent placeholders carrying
+    the sensor positions of a reference recording, marks them bad, and lets
+    mne.io.Raw.interpolate_bads() fill them in.
 
     Parameters
     ----------
     raw : mne.io.Raw
         The object missing channels to be interpolated
     raw_reference : mne.io.Raw
-        The reference object containing all desired channels
+        The reference object containing all desired channels, used as the source
+        of the sensor positions for the missing channels
 
     Returns
     -------
-    d : mne.io.Raw
+    interpolated : mne.io.Raw
         New object containing all information from the original raw object and
         interpolated channels
 
+    Raises
+    ------
+    ValueError
+        If the two recordings do not share a sampling frequency, in which case
+        the placeholder channels could not be concatenated onto the timeline
+
     """
-    ref_channels = raw_reference.ch_chnames
-    raw_channels = raw.ch_names
+    import mne
 
-    diff = list(channel for channel in ref_channels if channel not in raw_channels)
+    missing = [ch for ch in raw_reference.ch_names if ch not in raw.ch_names]
+    if not missing:
+        return raw.copy()
 
-    b = raw.copy()
-    d = raw.copy()
+    if raw.info["sfreq"] != raw_reference.info["sfreq"]:
+        raise ValueError(
+            "raw and raw_reference must share a sampling frequency, got "
+            f"{raw.info['sfreq']} and {raw_reference.info['sfreq']}"
+        )
 
-    if len(diff) > 0:
-        b.pick_channels(b.ch_names[: len(diff)])
-        ac = raw.copy().pick_channels(diff)
-        b.info = ac.info
-        d.add_channels([b])
-        d.info["bads"] = diff
-        d.interpolate_bads(verbose=False)
+    # the placeholder samples are never read: interpolate_bads() overwrites every
+    # channel listed in info["bads"] from the surrounding sensors
+    placeholder_info = raw_reference.copy().pick(missing).info
+    placeholders = mne.io.RawArray(
+        np.zeros((len(missing), raw.n_times)),
+        placeholder_info,
+        first_samp=raw.first_samp,
+        verbose=False,
+    )
 
-    return d
+    interpolated = raw.copy().add_channels([placeholders], force_update_info=True)
+    interpolated.info["bads"] = missing
+    interpolated.interpolate_bads(verbose=False)
+    return interpolated
 
 
-def PTE_from_mne(mne_raw):
+def PTE_from_mne(raw: Any, picks: Any = None) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    This is a wrapper which allows calculating dPTE,PTE matrices by passing an
-    mne.io.Raw object and calling pyPTE.pyPTE.PTE_from_dataframe().
+    Computes dPTE and raw PTE matrices for the channels of an mne.io.Raw object
 
     Parameters
     ----------
-    mne_raw : mne.io.Raw
+    raw : mne.io.Raw
         EEG or MEG recording serving data in sensor space
+    picks : str | list | slice | None
+        Channels to analyse, accepting anything mne.io.Raw.pick() accepts. By
+        default every channel is used, which for an unfiltered recording will
+        include non-data channels such as stimulus triggers.
 
     Returns
     -------
-    result : pandas.DataFrame
-        The wrapper returns a tuple of (dPTE, PTE) matrices, which are stored as a
-        pandas.DataFrame and indexed by the channels names of the input file.
-        This allows convenient analysis of the results.
+    (dPTE_df, raw_PTE_df) : tuple of pandas.DataFrame objects
+        The dPTE and raw PTE matrices, indexed in both dimensions by channel
+        name, so entry ``[i, j]`` describes information flow from channel ``i``
+        to channel ``j``
 
     """
+    selection = raw.copy().pick(picks) if picks is not None else raw
 
-    data_frame = mne_raw.to_data_frame()
-    return PTE_from_dataframe(data_frame)
+    # mne serves data as (n_channels, n_times), which is what the core expects
+    dPTE, raw_PTE = pyPTE.PTE(selection.get_data())
+
+    channels = selection.ch_names
+    dPTE_df = pd.DataFrame(dPTE, index=channels, columns=channels)
+    raw_PTE_df = pd.DataFrame(raw_PTE, index=channels, columns=channels)
+    return dPTE_df, raw_PTE_df

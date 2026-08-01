@@ -3,10 +3,9 @@ import pandas as pd
 from pyPTE.core import pyPTE
 
 
-def PTE_from_dataframe(data_frame):
+def PTE_from_dataframe(data_frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    This is a wrapper which allows calculating dPTE,PTE matrices by passing a
-    pandas.DataFrame
+    Computes dPTE and raw PTE matrices for the channels of a pandas.DataFrame
 
     Parameters
     ----------
@@ -17,13 +16,17 @@ def PTE_from_dataframe(data_frame):
 
     Returns
     -------
-    (dPTE_df, rPTE_df) : tuple of pandas.DataFrame objects
-        The results from pyPTE.pyPTE.PTE are stored as pandas.DataFrames, while it is
-        indexed in two dimensions by pandas.DataFrame.columns of the input
+    (dPTE_df, raw_PTE_df) : tuple of pandas.DataFrame objects
+        The results from pyPTE.pyPTE.PTE are stored as pandas.DataFrames, indexed in
+        both dimensions by pandas.DataFrame.columns of the input, so entry
+        ``[i, j]`` describes information flow from channel ``i`` to channel ``j``
 
     """
-    time_series = data_frame.as_matrix()
-    dPTE, rPTE = pyPTE.PTE(time_series)
-    dPTE_df = pd.DataFrame(dPTE, index=data_frame.columns, columns=data_frame.columns)
-    rPTE_df = pd.DataFrame(rPTE, index=data_frame.columns, columns=data_frame.columns)
-    return dPTE_df, rPTE_df
+    # the frame is time-major, while the core expects (n_channels, n_samples)
+    time_series = data_frame.to_numpy().T
+    dPTE, raw_PTE = pyPTE.PTE(time_series)
+
+    channels = data_frame.columns
+    dPTE_df = pd.DataFrame(dPTE, index=channels, columns=channels)
+    raw_PTE_df = pd.DataFrame(raw_PTE, index=channels, columns=channels)
+    return dPTE_df, raw_PTE_df
