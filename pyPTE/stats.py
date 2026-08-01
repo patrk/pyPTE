@@ -17,13 +17,22 @@ is precisely the bias that needs subtracting.
 """
 
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
 import numpy.typing as npt
+from scipy import stats as _scipy_stats
 
 from pyPTE.core.pyPTE import PTE
 
-__all__ = ["SignificanceResult", "benjamini_hochberg", "surrogate_test"]
+__all__ = [
+    "GroupResult",
+    "SignificanceResult",
+    "benjamini_hochberg",
+    "group_contrast",
+    "group_test",
+    "surrogate_test",
+]
 
 
 @dataclass
@@ -48,6 +57,11 @@ class SignificanceResult:
         a bias that has nothing to do with coupling
     n_surrogates : int
         number of surrogates the null was built from
+    null_distribution : numpy.ndarray | None
+        n_surrogates x m x m array of surrogate dPTE values, present only when
+        the test was run with ``keep_null=True``. Useful for plotting where an
+        observation falls within its own null, at the cost of holding every
+        surrogate matrix in memory.
     """
 
     dPTE: npt.NDArray
@@ -57,6 +71,7 @@ class SignificanceResult:
     threshold: float
     null_mean: npt.NDArray
     n_surrogates: int
+    null_distribution: npt.NDArray | None = None
 
     @property
     def n_significant(self) -> int:
@@ -148,6 +163,7 @@ def surrogate_test(
     alpha: float = 0.05,
     seed: int | None = None,
     progress: bool = False,
+    keep_null: bool = False,
 ) -> SignificanceResult:
     """Test every directed channel pair against a time-shifted surrogate null.
 
@@ -169,6 +185,9 @@ def surrogate_test(
         seed for surrogate generation, for reproducible results
     progress : bool
         print progress, since a large montage takes a while
+    keep_null : bool
+        retain every surrogate matrix on the result. Needed to plot where an
+        observation sits within its null; costs n_surrogates * m * m floats.
 
     Returns
     -------
@@ -186,12 +205,17 @@ def surrogate_test(
     observed_effect = np.abs(dPTE - 0.5)
     at_least_as_extreme = np.zeros_like(dPTE, dtype=int)
     null_total = np.zeros_like(dPTE, dtype=float)
+    null_distribution = (
+        np.empty((n_surrogates, *dPTE.shape), dtype=float) if keep_null else None
+    )
 
     for index in range(n_surrogates):
         surrogate_dPTE, _ = PTE(time_shifted_surrogate(observed, rng))
         surrogate_effect = np.abs(surrogate_dPTE - 0.5)
         at_least_as_extreme += surrogate_effect >= observed_effect
         null_total += surrogate_dPTE
+        if null_distribution is not None:
+            null_distribution[index] = surrogate_dPTE
         if progress and (index + 1) % 25 == 0:
             print(f"  surrogate {index + 1}/{n_surrogates}")
 
@@ -211,4 +235,199 @@ def surrogate_test(
         threshold=threshold,
         null_mean=null_total / n_surrogates,
         n_surrogates=n_surrogates,
+        null_distribution=null_distribution,
+    )
+
+
+@dataclass
+class GroupResult:
+    """Outcome of a test across repeated observations of the same channel pairs.
+
+    Attributes
+    ----------
+    statistic : numpy.ndarray
+        m x m test statistic per ordered pair
+    p_values : numpy.ndarray
+        m x m p-values, with the diagonal set to 1.0
+    significant : numpy.ndarray
+        m x m boolean mask surviving Benjamini-Hochberg correction
+    threshold : float
+        largest p-value called significant, or 0.0 if nothing survived
+    effect : numpy.ndarray
+        m x m mean of the quantity tested: the mean dPTE for group_test, or the
+        mean difference between conditions for group_contrast
+    n_observations : int
+        number of epochs, trials or subjects the test ran over
+    method : str
+        which test was applied
+    """
+
+    statistic: npt.NDArray
+    p_values: npt.NDArray
+    significant: npt.NDArray
+    threshold: float
+    effect: npt.NDArray
+    n_observations: int
+    method: str
+
+    @property
+    def n_significant(self) -> int:
+        return int(self.significant.sum())
+
+    def summary(self) -> str:
+        m = self.statistic.shape[0]
+        return (
+            f"{self.n_significant} of {m * (m - 1)} directed pairs significant "
+            f"at p <= {self.threshold:.4g} ({self.n_observations} observations, "
+            f"{self.method}, Benjamini-Hochberg corrected)"
+        )
+
+
+def _pairwise_test(
+    samples: npt.NDArray, method: str, alternative: str = "two-sided"
+) -> tuple[npt.NDArray, npt.NDArray]:
+    """Apply a one-sample test independently to every ordered channel pair."""
+    n_obs, m, _ = samples.shape
+    statistic = np.zeros((m, m))
+    p_values = np.ones((m, m))
+
+    for i in range(m):
+        for j in range(m):
+            if i == j:
+                continue
+            column = samples[:, i, j]
+            if np.allclose(column, column[0]):
+                # a constant column carries no evidence either way
+                continue
+            if method == "wilcoxon":
+                result = _scipy_stats.wilcoxon(column, alternative=alternative)
+            elif method == "ttest":
+                result = _scipy_stats.ttest_1samp(
+                    column, 0.0, alternative=alternative
+                )
+            else:
+                raise ValueError(f"unknown method {method!r}")
+            statistic[i, j] = float(result.statistic)
+            p_values[i, j] = float(result.pvalue)
+
+    return statistic, p_values
+
+
+def group_test(
+    matrices: npt.ArrayLike,
+    *,
+    reference: float = 0.5,
+    method: Literal["wilcoxon", "ttest"] = "wilcoxon",
+    alpha: float = 0.05,
+) -> GroupResult:
+    """Test whether dPTE departs from chance consistently across observations.
+
+    This is the counterpart to `surrogate_test` for the way M/EEG data usually
+    arrives: many short epochs, trials or subjects rather than one long
+    recording. It is also far more powerful, because it asks whether an effect
+    is *consistent* rather than whether one recording's value is extreme.
+    Eighty epochs of a third of a second each can settle a question that a
+    minute of continuous data leaves marginal.
+
+    A single epoch may be far too short for a reliable dPTE estimate on its
+    own; what matters is that the estimate is unbiased, so the noise averages
+    out over observations.
+
+    Parameters
+    ----------
+    matrices : numpy.ndarray
+        n_observations x m x m array of dPTE matrices, one per epoch, trial or
+        subject
+    reference : float
+        the no-effect value to test against. 0.5 for dPTE; use 0.0 when passing
+        raw PTE.
+    method : {"wilcoxon", "ttest"}
+        Wilcoxon signed-rank by default, which makes no normality assumption
+        and is the usual choice in the M/EEG literature
+    alpha : float
+        target false discovery rate
+
+    Returns
+    -------
+    result : GroupResult
+
+    Notes
+    -----
+    dPTE is antisymmetric, so ``[i, j]`` and ``[j, i]`` express the same
+    finding twice. The correction below treats them as separate tests, which is
+    conservative rather than wrong.
+    """
+    samples = np.asarray(matrices, dtype=float)
+    if samples.ndim != 3 or samples.shape[1] != samples.shape[2]:
+        raise ValueError(
+            f"expected n_observations x m x m, got shape {samples.shape}"
+        )
+    if samples.shape[0] < 2:
+        raise ValueError("a group test needs at least 2 observations")
+
+    centred = samples - reference
+    statistic, p_values = _pairwise_test(centred, method)
+    significant, threshold = benjamini_hochberg(p_values, alpha)
+    np.fill_diagonal(significant, False)
+
+    return GroupResult(
+        statistic=statistic,
+        p_values=p_values,
+        significant=significant,
+        threshold=threshold,
+        effect=samples.mean(axis=0),
+        n_observations=samples.shape[0],
+        method=f"{method} vs {reference}",
+    )
+
+
+def group_contrast(
+    condition_a: npt.ArrayLike,
+    condition_b: npt.ArrayLike,
+    *,
+    method: Literal["wilcoxon", "ttest"] = "wilcoxon",
+    alpha: float = 0.05,
+) -> GroupResult:
+    """Test whether directed connectivity differs between two conditions.
+
+    The paired comparison most connectivity studies actually want: the same
+    subjects measured twice, asking which pairs changed. Both inputs must be
+    ordered identically, so that row k of each is the same subject.
+
+    Parameters
+    ----------
+    condition_a, condition_b : numpy.ndarray
+        n_observations x m x m dPTE matrices, paired along the first axis
+    method : {"wilcoxon", "ttest"}
+        Wilcoxon signed-rank by default
+    alpha : float
+        target false discovery rate
+
+    Returns
+    -------
+    result : GroupResult
+        ``effect`` holds the mean difference, condition_a minus condition_b
+    """
+    a = np.asarray(condition_a, dtype=float)
+    b = np.asarray(condition_b, dtype=float)
+    if a.shape != b.shape:
+        raise ValueError(f"conditions must have matching shapes, got {a.shape} {b.shape}")
+    if a.ndim != 3 or a.shape[1] != a.shape[2]:
+        raise ValueError(f"expected n_observations x m x m, got shape {a.shape}")
+    if a.shape[0] < 2:
+        raise ValueError("a paired contrast needs at least 2 observations")
+
+    difference = a - b
+    statistic, p_values = _pairwise_test(difference, method)
+    significant, threshold = benjamini_hochberg(p_values, alpha)
+    np.fill_diagonal(significant, False)
+
+    return GroupResult(
+        statistic=statistic,
+        p_values=p_values,
+        significant=significant,
+        threshold=threshold,
+        effect=difference.mean(axis=0),
+        n_observations=a.shape[0],
+        method=f"paired {method}",
     )
