@@ -22,7 +22,10 @@ jobs:
       - uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
-      - run: uv sync --locked --all-extras
+      # --frozen, not --locked: the release commit bumps the version in
+      # pyproject.toml but not in uv.lock, so --locked fails on every push
+      # after a release. --frozen installs from the lock as it stands.
+      - run: uv sync --frozen --all-extras
       - name: ruff check
         run: uv run ruff check .
       - name: ruff format
@@ -43,7 +46,10 @@ jobs:
         with:
           enable-cache: true
           python-version: ${{ matrix.python-version }}
-      - run: uv sync --locked --all-extras
+      # --frozen, not --locked: the release commit bumps the version in
+      # pyproject.toml but not in uv.lock, so --locked fails on every push
+      # after a release. --frozen installs from the lock as it stands.
+      - run: uv sync --frozen --all-extras
       - name: pytest
         run: uv run pytest --cov=pyPTE --cov-report=term-missing
 
