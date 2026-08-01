@@ -26,9 +26,11 @@ from scipy import stats as _scipy_stats
 from pyPTE.core.pyPTE import PTE
 
 __all__ = [
+    "ClusterResult",
     "GroupResult",
     "SignificanceResult",
     "benjamini_hochberg",
+    "cluster_permutation",
     "group_contrast",
     "group_test",
     "surrogate_test",
@@ -428,4 +430,212 @@ def group_contrast(
         effect=difference.mean(axis=0),
         n_observations=a.shape[0],
         method=f"paired {method}",
+    )
+
+
+@dataclass
+class ClusterResult:
+    """Outcome of a cluster-based permutation test over a connectivity matrix.
+
+    Attributes
+    ----------
+    statistic : numpy.ndarray
+        m x m t-statistic per ordered pair
+    clusters : list of numpy.ndarray
+        boolean m x m masks, one per connected component found above the
+        cluster-forming threshold, ordered from strongest to weakest
+    cluster_p : numpy.ndarray
+        p-value per cluster, against the null of the largest cluster mass
+    significant : numpy.ndarray
+        m x m boolean mask: the union of the clusters that survived
+    threshold : float
+        the cluster-forming t-threshold that was applied
+    n_permutations : int
+    """
+
+    statistic: npt.NDArray
+    clusters: list[npt.NDArray]
+    cluster_p: npt.NDArray
+    significant: npt.NDArray
+    threshold: float
+    n_permutations: int
+
+    @property
+    def n_significant_clusters(self) -> int:
+        return int((self.cluster_p <= 0.05).sum())
+
+    def summary(self) -> str:
+        if not self.clusters:
+            return (
+                f"no edges passed the cluster-forming threshold "
+                f"t = {self.threshold:.2f}"
+            )
+        best = float(self.cluster_p.min())
+        return (
+            f"{len(self.clusters)} cluster(s) above t = {self.threshold:.2f}; "
+            f"smallest cluster p = {best:.4g} "
+            f"({self.n_permutations} permutations, {int(self.significant.sum())} "
+            f"edges retained)"
+        )
+
+
+def _edgewise_t(samples: npt.NDArray) -> npt.NDArray:
+    """One-sample t-statistic per edge, with zero-variance edges set to zero."""
+    n = samples.shape[0]
+    mean = samples.mean(axis=0)
+    sd = samples.std(axis=0, ddof=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        t = mean / (sd / np.sqrt(n))
+    return np.nan_to_num(t, nan=0.0, posinf=0.0, neginf=0.0)
+
+
+def _find_clusters(
+    statistic: npt.NDArray, threshold: float
+) -> tuple[list[npt.NDArray], npt.NDArray]:
+    """Connected components of the supra-threshold edges, and their masses.
+
+    Positive and negative effects are clustered separately, so an increase and
+    a decrease can never be joined into one component through a shared node.
+    """
+    from scipy.sparse import csr_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    m = statistic.shape[0]
+    off_diagonal = ~np.eye(m, dtype=bool)
+
+    clusters: list[npt.NDArray] = []
+    masses: list[float] = []
+
+    for sign in (1.0, -1.0):
+        supra = (statistic * sign > threshold) & off_diagonal
+        if not supra.any():
+            continue
+
+        # weak connectivity: an edge links its two nodes regardless of direction
+        n_components, labels = connected_components(
+            csr_matrix(supra), directed=True, connection="weak"
+        )
+        for component in range(n_components):
+            in_component = labels == component
+            mask = supra & in_component[:, np.newaxis] & in_component[np.newaxis, :]
+            if mask.any():
+                clusters.append(mask)
+                masses.append(float(np.abs(statistic[mask]).sum()))
+
+    if not clusters:
+        return [], np.empty(0)
+
+    order = np.argsort(masses)[::-1]
+    return [clusters[k] for k in order], np.asarray(masses)[order]
+
+
+def cluster_permutation(
+    condition_a: npt.ArrayLike,
+    condition_b: npt.ArrayLike | None = None,
+    *,
+    reference: float = 0.5,
+    threshold_p: float = 0.01,
+    n_permutations: int = 1000,
+    alpha: float = 0.05,
+    seed: int | None = None,
+) -> ClusterResult:
+    """Cluster-based permutation test over a connectivity matrix.
+
+    The multiple-comparison approach the M/EEG literature expects, adapted to
+    connectivity as the network-based statistic: threshold the edgewise
+    statistic, group the survivors into connected components, and compare each
+    component's mass against the null of the *largest* component under random
+    sign flips. Because the null is built from the maximum, family-wise error
+    is controlled across the whole matrix without testing each edge separately.
+
+    It is more powerful than Benjamini-Hochberg when an effect is distributed
+    over several connected edges, and less powerful when effects are isolated,
+    since a lone edge forms a cluster of one. Its claim is also weaker: a
+    significant cluster means "this component contains an effect", not "each of
+    these edges is an effect".
+
+    Parameters
+    ----------
+    condition_a : numpy.ndarray
+        n_observations x m x m array of dPTE matrices
+    condition_b : numpy.ndarray | None
+        paired second condition. When omitted, condition_a is tested against
+        `reference` instead.
+    reference : float
+        no-effect value for the one-sample case; 0.5 for dPTE
+    threshold_p : float
+        cluster-forming threshold, as an uncorrected two-tailed p-value. This
+        is a free parameter of the method, not an inference: raising it favours
+        few large clusters, lowering it favours many small ones.
+    n_permutations : int
+        size of the permutation null
+    alpha : float
+        cluster-level significance
+    seed : int | None
+
+    Returns
+    -------
+    result : ClusterResult
+    """
+    a = np.asarray(condition_a, dtype=float)
+    if a.ndim != 3 or a.shape[1] != a.shape[2]:
+        raise ValueError(f"expected n_observations x m x m, got shape {a.shape}")
+
+    if condition_b is None:
+        samples = a - reference
+    else:
+        b = np.asarray(condition_b, dtype=float)
+        if b.shape != a.shape:
+            raise ValueError(
+                f"conditions must have matching shapes, got {a.shape} {b.shape}"
+            )
+        samples = a - b
+
+    n_obs = samples.shape[0]
+    if n_obs < 2:
+        raise ValueError("a permutation test needs at least 2 observations")
+
+    threshold = float(_scipy_stats.t.ppf(1.0 - threshold_p / 2.0, df=n_obs - 1))
+
+    observed = _edgewise_t(samples)
+    clusters, masses = _find_clusters(observed, threshold)
+
+    if not clusters:
+        return ClusterResult(
+            statistic=observed,
+            clusters=[],
+            cluster_p=np.empty(0),
+            significant=np.zeros_like(observed, dtype=bool),
+            threshold=threshold,
+            n_permutations=n_permutations,
+        )
+
+    # sign flipping is the exchangeability the paired and one-sample designs
+    # provide: under the null, the sign of each observation's effect is arbitrary
+    rng = np.random.default_rng(seed)
+    null_maxima = np.empty(n_permutations)
+    for index in range(n_permutations):
+        flips = rng.choice([-1.0, 1.0], size=(n_obs, 1, 1))
+        _, permuted_masses = _find_clusters(_edgewise_t(samples * flips), threshold)
+        null_maxima[index] = permuted_masses[0] if permuted_masses.size else 0.0
+
+    cluster_p = np.array(
+        [
+            (1.0 + np.sum(null_maxima >= mass)) / (1.0 + n_permutations)
+            for mass in masses
+        ]
+    )
+
+    significant = np.zeros_like(observed, dtype=bool)
+    for mask, p in zip(clusters, cluster_p, strict=True):
+        if p <= alpha:
+            significant |= mask
+
+    return ClusterResult(
+        statistic=observed,
+        clusters=clusters,
+        cluster_p=cluster_p,
+        significant=significant,
+        threshold=threshold,
+        n_permutations=n_permutations,
     )
