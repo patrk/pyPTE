@@ -302,9 +302,7 @@ def _pairwise_test(
             if method == "wilcoxon":
                 result = _scipy_stats.wilcoxon(column, alternative=alternative)
             elif method == "ttest":
-                result = _scipy_stats.ttest_1samp(
-                    column, 0.0, alternative=alternative
-                )
+                result = _scipy_stats.ttest_1samp(column, 0.0, alternative=alternative)
             else:
                 raise ValueError(f"unknown method {method!r}")
             statistic[i, j] = float(result.statistic)
@@ -359,9 +357,7 @@ def group_test(
     """
     samples = np.asarray(matrices, dtype=float)
     if samples.ndim != 3 or samples.shape[1] != samples.shape[2]:
-        raise ValueError(
-            f"expected n_observations x m x m, got shape {samples.shape}"
-        )
+        raise ValueError(f"expected n_observations x m x m, got shape {samples.shape}")
     if samples.shape[0] < 2:
         raise ValueError("a group test needs at least 2 observations")
 
@@ -411,7 +407,9 @@ def group_contrast(
     a = np.asarray(condition_a, dtype=float)
     b = np.asarray(condition_b, dtype=float)
     if a.shape != b.shape:
-        raise ValueError(f"conditions must have matching shapes, got {a.shape} {b.shape}")
+        raise ValueError(
+            f"conditions must have matching shapes, got {a.shape} {b.shape}"
+        )
     if a.ndim != 3 or a.shape[1] != a.shape[2]:
         raise ValueError(f"expected n_observations x m x m, got shape {a.shape}")
     if a.shape[0] < 2:
