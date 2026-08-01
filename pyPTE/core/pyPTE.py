@@ -142,29 +142,33 @@ def compute_PTE(phase: npt.NDArray, delay: int) -> npt.NDArray:
             y = phase[j, :-delay]
             x = phase[i, :-delay]
 
-            P_y = np.zeros([y.max() + 1])
-            np.add.at(P_y, [y], 1)
+            # NOTE: the index must be a tuple. NumPy >= 1.23 treats a *list*
+            # index as a single fancy-index array into axis 0 rather than as a
+            # per-axis index, which silently inflates the joint counts.
+            P_y = np.zeros(y.max() + 1)
+            np.add.at(P_y, y, 1)
 
-            max_dim_ypr_y = max(ypr.max(), y.max()) + 1
-            P_ypr_y = np.zeros([max_dim_ypr_y, max_dim_ypr_y])
+            P_ypr_y = np.zeros((ypr.max() + 1, y.max() + 1))
+            np.add.at(P_ypr_y, (ypr, y), 1)
 
-            max_dim_y_x = max(y.max(), x.max()) + 1
-            P_y_x = np.zeros([max_dim_y_x, max_dim_y_x])
+            P_y_x = np.zeros((y.max() + 1, x.max() + 1))
+            np.add.at(P_y_x, (y, x), 1)
 
-            max_dim_ypr_y_x = max(ypr.max(), y.max(), x.max()) + 1
-            P_ypr_y_x = np.zeros([max_dim_ypr_y_x, max_dim_ypr_y_x, max_dim_ypr_y_x])
+            P_ypr_y_x = np.zeros((ypr.max() + 1, y.max() + 1, x.max() + 1))
+            np.add.at(P_ypr_y_x, (ypr, y, x), 1)
 
             P_y /= n - delay
             P_ypr_y /= n - delay
             P_y_x /= n - delay
             P_ypr_y_x /= n - delay
 
-            Hy = -np.nansum(np.multiply(P_y, np.log2(P_y)))
-            Hypr_y = -np.nansum(np.nansum(np.multiply(P_ypr_y, np.log2(P_ypr_y))))
-            Hy_x = -np.nansum(np.nansum(np.multiply(P_y_x, np.log2(P_y_x))))
-            Hypr_y_x = -np.nansum(
-                np.nansum(np.nansum(np.multiply(P_ypr_y_x, np.log2(P_ypr_y_x))))
-            )
+            # empty bins give 0 * log2(0) -> nan, which nansum drops
+            with np.errstate(divide="ignore", invalid="ignore"):
+                Hy = -np.nansum(P_y * np.log2(P_y))
+                Hypr_y = -np.nansum(P_ypr_y * np.log2(P_ypr_y))
+                Hy_x = -np.nansum(P_y_x * np.log2(P_y_x))
+                Hypr_y_x = -np.nansum(P_ypr_y_x * np.log2(P_ypr_y_x))
+
             PTE[i, j] = Hypr_y + Hy_x - Hy - Hypr_y_x
     return PTE
 
