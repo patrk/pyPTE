@@ -100,6 +100,42 @@ def ring_with_shortcut(m: int, strength: float = 6.0) -> npt.NDArray:
     return coupling
 
 
+def global_coupling(m: int, strength: float = 6.0) -> npt.NDArray:
+    """Mean-field coupling: every oscillator drives every other equally.
+
+    The classic Kuramoto arrangement, normalised by m so the total drive per
+    oscillator does not grow with network size. It is symmetric, so it carries
+    no net direction anywhere and a directional measure should report nothing.
+    Included precisely because that is a useful negative control.
+    """
+    coupling = np.full((m, m), strength / m)
+    np.fill_diagonal(coupling, 0.0)
+    return coupling
+
+
+def local_coupling(
+    m: int, strength: float = 6.0, neighbours: int = 1, directed: bool = True
+) -> npt.NDArray:
+    """Nearest-neighbour coupling on a ring, out to `neighbours` steps.
+
+    With ``directed=True`` each oscillator drives only its clockwise
+    neighbours, producing travelling activity with a definite direction. With
+    ``directed=False`` the coupling is symmetric, which synchronises locally
+    but again leaves no net direction to find.
+
+    Contrasting local with global coupling is the distinction the original
+    examples drew: mean-field influence spread thinly over the whole network,
+    versus strong influence confined to a neighbourhood.
+    """
+    coupling = np.zeros((m, m))
+    for i in range(m):
+        for step in range(1, neighbours + 1):
+            coupling[i, (i + step) % m] = strength
+            if not directed:
+                coupling[i, (i - step) % m] = strength
+    return coupling
+
+
 def two_groups(
     group_size: int = 4,
     within: float = 2.0,
