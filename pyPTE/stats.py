@@ -1,19 +1,16 @@
 """Significance testing for phase transfer entropy.
 
-A raw dPTE value cannot be read as evidence of directed coupling. Two entirely
-independent signals produce dPTE well away from 0.5 whenever they differ in
-signal-to-noise ratio, because the noisier channel is less predictable from its
-own past and the cleaner one therefore looks like a driver. Channel-to-channel
-SNR differences are the norm in real recordings, so the question is never "is
-this value above 0.5" but "is it further from 0.5 than chance allows".
+A raw dPTE value is not evidence of coupling on its own. Two independent signals
+land well away from 0.5 whenever they differ in signal-to-noise ratio, because
+the noisier one is harder to predict from its own past, so the cleaner one looks
+like a driver. Real channels always differ in SNR, so the question is not "is
+this above 0.5" but "is it further from 0.5 than chance allows".
 
-The null distribution here comes from time-shifted surrogates. Circularly
-shifting each channel by an independent random offset leaves every marginal
-property of that channel untouched - its amplitude distribution, spectrum and
-entropy are exactly preserved - while destroying the cross-channel timing that
-directed coupling depends on. Any apparent direction that survives is therefore
-a property of the individual channels rather than of their interaction, which
-is precisely the bias that needs subtracting.
+The null comes from time-shifted surrogates: circularly shifting each channel by
+its own random offset preserves that channel's spectrum, amplitude distribution
+and entropy exactly, while destroying the cross-channel timing that coupling
+depends on. Whatever survives is a property of the interaction rather than of
+the individual channels.
 """
 
 from dataclasses import dataclass

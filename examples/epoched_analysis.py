@@ -1,23 +1,16 @@
-"""An end-to-end analysis of the kind M/EEG data actually supports.
+"""A two-condition analysis on short epochs, which is what M/EEG usually gives you.
 
-Real recordings rarely offer minutes of clean continuous signal per condition.
-They offer many short epochs, from several subjects, in two conditions. This
-example runs that design start to finish:
+Runs the whole pipeline: epoch, dPTE per epoch, group statistics, correction.
+Pooling over 25 one-second epochs beats a surrogate test on a much longer
+continuous recording, because it asks whether an effect is consistent rather
+than whether one number is extreme.
 
-    epoch -> dPTE per epoch -> group statistics -> corrected inference
+Compares both corrections. FDR bounds the share of wrong edges among those
+reported; cluster permutation bounds the chance of reporting a spurious
+component, which is what M/EEG reviewers usually expect.
 
-and shows the practical consequence: a group test over short epochs is far more
-sensitive than a surrogate test on one long recording, because it asks whether
-an effect is *consistent* rather than whether a single number is extreme.
-Twenty-five epochs of one second settle a question that sixty continuous
-seconds leave marginal.
-
-Two corrections are compared, because they answer different questions.
-Benjamini-Hochberg bounds the share of false edges among those reported.
-Cluster-based permutation, in its network-based form, bounds the chance of
-reporting any spurious *component* - the correction most M/EEG reviewers
-expect - but its claim is weaker: a significant cluster means the component
-contains an effect, not that every edge in it is one.
+The last thing it shows is the catch: dPTE grows with path length, so indirect
+pairs outrank the real edges.
 
 Run with:
     uv run python -m examples.epoched_analysis [--quick]

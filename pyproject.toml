@@ -56,6 +56,15 @@ dev = [
 examples = [
     "matplotlib>=3.8",
 ]
+# kept out of `examples` on purpose: tvb-data is a ~50 MB download and the
+# simulator pulls in ~44 packages, so CI installs it only for the TVB example
+tvb = [
+    "tvb-library>=2.10",
+    "tvb-data>=2.0",
+    # tvb-library declares `numba` with no bound, and old numba pulls an
+    # llvmlite that cannot build on current Python
+    "numba>=0.60",
+]
 
 [build-system]
 requires = ["hatchling>=1.27"]

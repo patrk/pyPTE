@@ -1,20 +1,14 @@
-"""How much recording do you need, and what does more of it actually buy?
+"""How much recording do you need, and what does more of it buy?
 
-Phase oscillators make directed coupling easy to see. Jansen-Rit columns do
-not: they produce a realistic alpha rhythm whose phase is dominated by each
-column's own dynamics, so the influence of a neighbour is a small perturbation
-on top. This example asks the practical question that follows - how long a
-recording is needed before that influence is detectable at all.
+Jansen-Rit columns are much harder than phase oscillators: each column's alpha
+rhythm is driven mostly by its own dynamics, so a neighbour's influence is a
+small perturbation on top.
 
-The answer has an uncomfortable second half. Recall improves with recording
-length and then saturates, but precision *falls*, because a bivariate measure
-cannot tell a direct connection from a transitive one. Given enough data the
-indirect path a -> b -> c becomes detectable as a -> c, and it is not a
-statistical error: information genuinely does flow that way. It simply is not
-an edge of the network you were trying to recover.
-
-So there is an optimum recording length for network reconstruction, which is
-not the intuition most people bring to this.
+Recall climbs with recording length and then saturates, but precision drops,
+because with enough data the indirect path a -> b -> c shows up as a -> c. Those
+extra detections are not errors, information really does flow that way, they
+just are not edges of the network you wanted. So there is an optimum recording
+length, which is not what most people expect.
 
 Run with:
     uv run python -m examples.neural_mass_network [--quick]
