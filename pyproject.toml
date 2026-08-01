@@ -55,8 +55,6 @@ dev = [
 ]
 examples = [
     "matplotlib>=3.8",
-    "seaborn>=0.13",
-    "sdeint>=0.3",
 ]
 
 [build-system]
