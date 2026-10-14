@@ -274,4 +274,3 @@ def test_cluster_permutation_stores_alpha_on_result():
     res = cluster_permutation(data, n_permutations=100, alpha=0.10, seed=0)
     assert res.alpha == 0.10
     assert res.n_significant_clusters == int((res.cluster_p <= 0.10).sum())
-
