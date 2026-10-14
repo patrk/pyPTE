@@ -1,4 +1,6 @@
-"""How much recording do you need, and what does more of it buy?
+"""
+How much recording do you need, and what does more of it buy?
+=============================================================
 
 Jansen-Rit columns are much harder than phase oscillators: each column's alpha
 rhythm is driven mostly by its own dynamics, so a neighbour's influence is a
@@ -10,12 +12,12 @@ extra detections are not errors, information really does flow that way, they
 just are not edges of the network you wanted. So there is an optimum recording
 length, which is not what most people expect.
 
-Run with:
+Run with::
+
     uv run python -m examples.neural_mass_network [--quick]
 """
 
 import argparse
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -24,14 +26,14 @@ from matplotlib.patches import Patch
 from scipy.signal import welch
 
 from examples.models import kuramoto, neural_mass_model
-from examples.utils.plotting import plot_matrix, save, use_house_style
+from examples.utils import style
+from examples.utils.plotting import FIGURES, plot_matrix, save, use_house_style
 from pyPTE import surrogate_test
 
 FS = 250.0
 COUPLING_STRENGTH = 30.0
 DELAY = 0.020  # about a fifth of an alpha cycle, where direction is clearest
 N_COLUMNS = 5
-FIGURES = Path(__file__).resolve().parent / "figures"
 
 
 def score(result, truth: np.ndarray) -> dict:
@@ -96,8 +98,8 @@ def main(quick: bool = False) -> None:
     )
     axes[0, 0].legend(fontsize=7, ncols=3)
 
-    axes[0, 1].semilogy(freqs, power, lw=1.2, color="#2f6f9f")
-    axes[0, 1].axvspan(8, 13, color="#c2453f", alpha=0.15)
+    axes[0, 1].semilogy(freqs, power, lw=1.2, color=style.BLUE)
+    axes[0, 1].axvspan(8, 13, color=style.OBS, alpha=0.15)
     axes[0, 1].set(
         xlim=(0, 40),
         xlabel="frequency (Hz)",
@@ -110,14 +112,14 @@ def main(quick: bool = False) -> None:
         seconds,
         [row["recall"] for row in rows],
         "o-",
-        color="#2f6f9f",
+        color=style.BLUE,
         label="recall (edges found)",
     )
     axes[1, 0].plot(
         seconds,
         [row["precision"] for row in rows],
         "s-",
-        color="#c2453f",
+        color=style.OBS,
         label="precision (of those, correct)",
     )
     axes[1, 0].set(
@@ -131,7 +133,7 @@ def main(quick: bool = False) -> None:
     # 0 correct rejection, 1 false positive, 2 missed edge, 3 true positive
     longest = rows[-1]
     outcome = 2 * truth.astype(int) + longest["significant"].astype(int)
-    categories = ListedColormap(["#e9ecef", "#c2453f", "#8a6d1f", "#2f6f9f"])
+    categories = ListedColormap([style.TINT, style.OBS, style.AMBER, style.BLUE])
     plot_matrix(
         axes[1, 1],
         outcome.astype(float),
@@ -147,17 +149,16 @@ def main(quick: bool = False) -> None:
     )
     axes[1, 1].legend(
         handles=[
-            Patch(color="#2f6f9f", label="true edge, found"),
-            Patch(color="#8a6d1f", label="true edge, missed"),
-            Patch(color="#c2453f", label="no edge, but flagged"),
-            Patch(color="#e9ecef", label="no edge, not flagged"),
+            Patch(color=style.BLUE, label="true edge, found"),
+            Patch(color=style.AMBER, label="true edge, missed"),
+            Patch(color=style.OBS, label="no edge, but flagged"),
+            Patch(color=style.TINT, label="no edge, not flagged"),
         ],
         fontsize=7,
         loc="upper left",
         bbox_to_anchor=(1.02, 1.0),
     )
 
-    fig.suptitle("Directed coupling between realistic neural mass columns")
     save(fig, FIGURES / "neural_mass_network.png")
 
     print("\nresults")

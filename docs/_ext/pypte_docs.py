@@ -6,3 +6,13 @@ from sphinx_gallery.scrapers import matplotlib_scraper
 def svg_scraper(block, block_vars, gallery_conf, **kwargs):
     """Capture figures as SVG so they stay sharp at any zoom."""
     return matplotlib_scraper(block, block_vars, gallery_conf, format="svg", **kwargs)
+
+
+def reset_argv(gallery_conf, script_vars):
+    """Run the repository examples in their --quick mode during docs builds.
+
+    Each example asserts its own result, so the docs build doubles as a check
+    that every documented claim still holds, at a fraction of the full runtime.
+    """
+    src = str(script_vars["src_file"])
+    return ["--quick"] if "/examples/" in src.replace("\\", "/") else []

@@ -1,4 +1,6 @@
-"""Can pyPTE reconstruct a known directed network of oscillators?
+"""
+Can pyPTE reconstruct a known directed network of oscillators?
+==============================================================
 
 Two ground-truth topologies are simulated with delayed Kuramoto oscillators:
 a directed ring, where every node drives its successor, and two internally
@@ -8,22 +10,21 @@ Ground truth is sparse but dPTE gives every ordered pair a value, so the
 recovered matrix is dense no matter what. Scored with AUC rather than a
 hand-picked threshold: the chance a true edge outranks a non-edge.
 
-Run with:
+Run with::
+
     uv run python -m examples.kuramoto_network [--quick]
 """
 
 import argparse
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 
 from examples.models import kuramoto
-from examples.utils.plotting import plot_matrix, save, use_house_style
+from examples.utils import style
+from examples.utils.plotting import FIGURES, plot_matrix, save, use_house_style
 from pyPTE import PTE
-
-FIGURES = Path(__file__).resolve().parent / "figures"
 
 
 def auc(scores: npt.NDArray, truth: npt.NDArray) -> float:
@@ -132,7 +133,7 @@ def main(quick: bool = False) -> None:
             bins=bins,
             alpha=0.65,
             label="no coupling",
-            color="#7f8c9b",
+            color=style.NULL,
         )
         if flat_symmetric.any():
             ax.hist(
@@ -140,20 +141,19 @@ def main(quick: bool = False) -> None:
                 bins=bins,
                 alpha=0.7,
                 label="symmetric (no net direction)",
-                color="#8a6d1f",
+                color=style.AMBER,
             )
         ax.hist(
             flat_dPTE[flat_directed],
             bins=bins,
             alpha=0.8,
             label="directed edge",
-            color="#c2453f",
+            color=style.OBS,
         )
         ax.axvline(0.5, ls="--", lw=1, color="0.4")
         ax.set(xlabel="dPTE", ylabel="count", title="Score separation")
         ax.legend(fontsize=7)
 
-    fig.suptitle("Reconstructing known directed networks of oscillators")
     save(fig, FIGURES / "kuramoto_network.png")
 
     print("\nresults")

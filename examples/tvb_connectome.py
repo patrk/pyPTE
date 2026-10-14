@@ -1,4 +1,6 @@
-"""Run pyPTE against a real anatomical connectome, and mostly fail.
+"""
+Run pyPTE against a real anatomical connectome, and mostly fail.
+================================================================
 
 Uses The Virtual Brain's 76-region tract-tracing connectome, so the
 directionality is real anatomy rather than something we invented. pyPTE only
@@ -17,19 +19,18 @@ Needs the optional TVB group:
 
 import argparse
 import warnings
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.signal import welch
 from scipy.stats import rankdata
 
-from examples.utils.plotting import plot_matrix, save, use_house_style
+from examples.utils import style
+from examples.utils.plotting import FIGURES, plot_matrix, save, use_house_style
 from pyPTE import PTE, surrogate_test
 
 FS = 250.0  # the temporal-average monitor below samples every 4 ms
 COUPLING = 0.1
-FIGURES = Path(__file__).resolve().parent / "figures"
 
 
 def load_tvb():
@@ -158,7 +159,7 @@ def main(quick: bool = False) -> None:
         alpha=0.6,
         density=True,
         label="unconnected",
-        color="#7f8c9b",
+        color=style.NULL,
     )
     ax.hist(
         dPTE[one_way],
@@ -166,7 +167,7 @@ def main(quick: bool = False) -> None:
         alpha=0.75,
         density=True,
         label="one-way edge",
-        color="#c2453f",
+        color=style.OBS,
     )
     ax.axvline(0.5, ls="--", lw=1, color="0.4")
     ax.set(
@@ -176,7 +177,6 @@ def main(quick: bool = False) -> None:
     )
     ax.legend(fontsize=8)
 
-    fig.suptitle("pyPTE against a real anatomical connectome (The Virtual Brain)")
     save(fig, FIGURES / "tvb_connectome.png")
 
     # a second, practical obstacle at this scale: the surrogate count sets a

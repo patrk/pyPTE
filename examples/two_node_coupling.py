@@ -1,4 +1,6 @@
-"""Does pyPTE recover the direction of a known one-way coupling?
+"""
+Does pyPTE recover the direction of a known one-way coupling?
+=============================================================
 
 The simplest ground truth there is: one oscillator drives a second with a fixed
 lag and nothing flows back. Sweeps coupling strength and lag, and checks that
@@ -9,22 +11,22 @@ signal-to-noise ratio produce a large spurious dPTE, because the noisier channel
 is harder to predict from its own past. Read raw dPTE on its own and an SNR gap
 looks just like coupling.
 
-Run with:
+Run with::
+
     uv run python -m examples.two_node_coupling [--quick]
 """
 
 import argparse
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-from examples.utils.plotting import save, use_house_style
+from examples.utils import style
+from examples.utils.plotting import FIGURES, save, use_house_style
 from pyPTE import PTE
 
 FS = 250.0
 NOISE = 0.3
-FIGURES = Path(__file__).resolve().parent / "figures"
 
 
 def oscillator(rng: np.random.Generator, n: int, freq: float = 10.0) -> np.ndarray:
@@ -124,7 +126,7 @@ def main(quick: bool = False) -> None:
         axes[0, 1],
         couplings,
         by_coupling,
-        color="#c2453f",
+        color=style.OBS,
         xlabel="coupling strength",
         title="Recovered direction vs coupling",
     )
@@ -132,7 +134,7 @@ def main(quick: bool = False) -> None:
         axes[1, 0],
         lags,
         by_lag,
-        color="#2f6f9f",
+        color=style.BLUE,
         xlabel="lag (samples)",
         title="Recovered direction vs lag",
     )
@@ -140,7 +142,7 @@ def main(quick: bool = False) -> None:
         axes[1, 1],
         ratios,
         by_ratio,
-        color="#8a6d1f",
+        color=style.AMBER,
         xlabel="noise ratio  B / A",
         title="CAVEAT: independent signals, unequal SNR",
     )
@@ -149,11 +151,10 @@ def main(quick: bool = False) -> None:
         0.93,
         "no coupling exists here",
         fontsize=8,
-        color="#8a6d1f",
+        color=style.AMBER,
         style="italic",
     )
 
-    fig.suptitle("pyPTE recovers known coupling, and what can fake it")
     save(fig, FIGURES / "two_node_coupling.png")
 
     uncoupled = by_coupling[:, 0].mean()
