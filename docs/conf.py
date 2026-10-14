@@ -30,6 +30,8 @@ exclude_patterns = ["_build", "tutorials"]
 myst_enable_extensions = ["dollarmath", "colon_fence"]
 
 autodoc_typehints = "none"
+# the adapters import pandas at module level; autodoc only needs their docstrings
+autodoc_mock_imports = ["pandas"]
 numpydoc_show_class_members = False
 numpydoc_validation_checks: set[str] = set()
 
