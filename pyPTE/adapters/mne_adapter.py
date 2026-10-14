@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from pyPTE.core import pyPTE
+from pyPTE.core.pyPTE import BinningRule, DelayRule
 
 
 def interpolate_mne(raw: Any, raw_reference: Any) -> Any:
@@ -65,7 +66,13 @@ def interpolate_mne(raw: Any, raw_reference: Any) -> Any:
     return interpolated
 
 
-def PTE_from_mne(raw: Any, picks: Any = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+def PTE_from_mne(
+    raw: Any,
+    picks: Any = None,
+    *,
+    binning: BinningRule = "scott",
+    delay: DelayRule = "zero-crossing",
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Computes dPTE and raw PTE matrices for the channels of an mne.io.Raw object
 
@@ -77,6 +84,8 @@ def PTE_from_mne(raw: Any, picks: Any = None) -> tuple[pd.DataFrame, pd.DataFram
         Channels to analyse, accepting anything mne.io.Raw.pick() accepts. By
         default every channel is used, which for an unfiltered recording will
         include non-data channels such as stimulus triggers.
+    binning, delay
+        passed to pyPTE.PTE
 
     Returns
     -------
@@ -89,7 +98,7 @@ def PTE_from_mne(raw: Any, picks: Any = None) -> tuple[pd.DataFrame, pd.DataFram
     selection = raw.copy().pick(picks) if picks is not None else raw
 
     # mne serves data as (n_channels, n_times), which is what the core expects
-    dPTE, raw_PTE = pyPTE.PTE(selection.get_data())
+    dPTE, raw_PTE = pyPTE.PTE(selection.get_data(), binning=binning, delay=delay)
 
     channels = selection.ch_names
     dPTE_df = pd.DataFrame(dPTE, index=channels, columns=channels)

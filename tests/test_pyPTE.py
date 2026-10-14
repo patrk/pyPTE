@@ -245,8 +245,8 @@ def test_compute_PTE_counts_use_every_sample():
 # --------------------------------------------------------------------------
 
 
-def test_defaults_are_unchanged():
-    """The parameters must not move existing results."""
+def test_defaults_are_scott_binning_and_zero_crossing():
+    """Pins the defaults, so changing them is a deliberate, visible decision."""
     data = coupled_pair(0)
     explicit = PTE(data, binning="scott", delay="zero-crossing")
     np.testing.assert_array_equal(PTE(data)[0], explicit[0])

@@ -13,6 +13,7 @@ depends on. Whatever survives is a property of the interaction rather than of
 the individual channels.
 """
 
+import warnings
 from dataclasses import dataclass
 from typing import Literal
 
@@ -20,7 +21,7 @@ import numpy as np
 import numpy.typing as npt
 from scipy import stats as _scipy_stats
 
-from pyPTE.core.pyPTE import PTE
+from pyPTE.core.pyPTE import PTE, BinningRule, DelayRule
 
 __all__ = [
     "ClusterResult",
@@ -31,6 +32,7 @@ __all__ = [
     "group_contrast",
     "group_test",
     "surrogate_test",
+    "surrogates_needed",
 ]
 
 
@@ -118,6 +120,60 @@ def time_shifted_surrogate(
     return surrogate
 
 
+def surrogates_needed(n_channels: int, alpha: float = 0.05) -> int:
+    """Smallest surrogate count that could yield a single significant edge.
+
+    A surrogate test can never report a p-value below ``1 / (n_surrogates + 1)``.
+    Its p-values are symmetric, ``p[i, j] == p[j, i]``, so an isolated pair
+    enters the correction twice and Benjamini-Hochberg accepts it at rank 2 once
+    p falls below ``alpha / n_pairs``, counting unordered pairs. Below the count
+    returned here, no edge can survive no matter how strong the coupling.
+
+    This is a worst case. A genuinely widespread effect is accepted at a higher
+    rank, where the threshold is looser, so fewer surrogates can still work when
+    many pairs are truly coupled.
+
+    Parameters
+    ----------
+    n_channels : int
+    alpha : float
+
+    Returns
+    -------
+    n_surrogates : int
+    """
+    n_pairs = n_channels * (n_channels - 1) // 2
+    if n_pairs < 1:
+        return 1
+    return int(np.ceil(n_pairs / alpha)) - 1
+
+
+def warn_if_underpowered(
+    n_channels: int, n_surrogates: int, alpha: float = 0.05
+) -> None:
+    """Warn when the surrogate count cannot produce a significant result."""
+    n_pairs = n_channels * (n_channels - 1) // 2
+    if n_pairs < 1:
+        return
+
+    floor = 1.0 / (n_surrogates + 1)
+    strictest = alpha / n_pairs
+    if floor <= strictest:
+        return
+
+    warnings.warn(
+        f"{n_surrogates} surrogates cannot produce a p-value below {floor:.3g}, "
+        f"but Benjamini-Hochberg over {n_pairs} channel pairs needs "
+        f"{strictest:.3g} to "
+        f"accept an isolated edge. Unless the effect is widespread, expect "
+        f"nothing to survive. Use at least "
+        f"{surrogates_needed(n_channels, alpha)} surrogates, or test at the "
+        f"cluster level with cluster_permutation().",
+        RuntimeWarning,
+        stacklevel=3,
+    )
+
+
 def benjamini_hochberg(
     p_values: npt.NDArray, alpha: float = 0.05
 ) -> tuple[npt.NDArray, float]:
@@ -155,6 +211,23 @@ def benjamini_hochberg(
     return np.asarray(p_values, dtype=float) <= threshold, threshold
 
 
+def _correct_off_diagonal(
+    p_values: npt.NDArray, alpha: float
+) -> tuple[npt.NDArray, float]:
+    """Benjamini-Hochberg over the off-diagonal entries of an m x m matrix.
+
+    The diagonal is self-transfer, never a test, so letting it into the family
+    would inflate n from m(m-1) to m^2 and tighten every threshold for nothing.
+    """
+    p_values = np.asarray(p_values, dtype=float)
+    off_diagonal = ~np.eye(p_values.shape[0], dtype=bool)
+    significant = np.zeros_like(p_values, dtype=bool)
+    significant[off_diagonal], threshold = benjamini_hochberg(
+        p_values[off_diagonal], alpha
+    )
+    return significant, threshold
+
+
 def surrogate_test(
     time_series: npt.ArrayLike,
     *,
@@ -163,6 +236,8 @@ def surrogate_test(
     seed: int | None = None,
     progress: bool = False,
     keep_null: bool = False,
+    binning: BinningRule = "scott",
+    delay: DelayRule = "zero-crossing",
 ) -> SignificanceResult:
     """Test every directed channel pair against a time-shifted surrogate null.
 
@@ -187,6 +262,8 @@ def surrogate_test(
     keep_null : bool
         retain every surrogate matrix on the result. Needed to plot where an
         observation sits within its null; costs n_surrogates * m * m floats.
+    binning, delay
+        passed to `PTE` for the observed data and every surrogate
 
     Returns
     -------
@@ -198,8 +275,24 @@ def surrogate_test(
     if n_surrogates < 1:
         raise ValueError("n_surrogates must be at least 1")
 
+    warn_if_underpowered(observed.shape[0], n_surrogates, alpha)
+
     rng = np.random.default_rng(seed)
-    dPTE, raw_PTE = PTE(observed)
+    dPTE, raw_PTE = PTE(observed, binning=binning, delay=delay)
+
+    # zero transfer in both directions, e.g. a duplicated or flat channel,
+    # makes dPTE 0/0; NaN compares False with everything, which would count
+    # no surrogate as extreme and hand the pair the smallest possible p-value
+    undefined = np.isnan(dPTE)
+    np.fill_diagonal(undefined, False)
+    if undefined.any():
+        warnings.warn(
+            f"dPTE is undefined for {int(undefined.sum()) // 2} channel pair(s) "
+            "with no transfer in either direction, such as duplicated or flat "
+            "channels; they are reported with p = 1",
+            RuntimeWarning,
+            stacklevel=2,
+        )
 
     observed_effect = np.abs(dPTE - 0.5)
     at_least_as_extreme = np.zeros_like(dPTE, dtype=int)
@@ -209,9 +302,14 @@ def surrogate_test(
     )
 
     for index in range(n_surrogates):
-        surrogate_dPTE, _ = PTE(time_shifted_surrogate(observed, rng))
+        surrogate_dPTE, _ = PTE(
+            time_shifted_surrogate(observed, rng), binning=binning, delay=delay
+        )
         surrogate_effect = np.abs(surrogate_dPTE - 0.5)
-        at_least_as_extreme += surrogate_effect >= observed_effect
+        # an undefined surrogate is counted as extreme, the conservative side
+        at_least_as_extreme += (surrogate_effect >= observed_effect) | np.isnan(
+            surrogate_effect
+        )
         null_total += surrogate_dPTE
         if null_distribution is not None:
             null_distribution[index] = surrogate_dPTE
@@ -221,10 +319,10 @@ def surrogate_test(
     # the +1 in both terms keeps p strictly positive: with a finite null we can
     # never claim a p-value smaller than 1 / (n_surrogates + 1)
     p_values = (at_least_as_extreme + 1.0) / (n_surrogates + 1.0)
+    p_values[undefined] = 1.0
     np.fill_diagonal(p_values, 1.0)
 
-    significant, threshold = benjamini_hochberg(p_values, alpha)
-    np.fill_diagonal(significant, False)
+    significant, threshold = _correct_off_diagonal(p_values, alpha)
 
     return SignificanceResult(
         dPTE=dPTE,
@@ -362,8 +460,7 @@ def group_test(
 
     centred = samples - reference
     statistic, p_values = _pairwise_test(centred, method)
-    significant, threshold = benjamini_hochberg(p_values, alpha)
-    np.fill_diagonal(significant, False)
+    significant, threshold = _correct_off_diagonal(p_values, alpha)
 
     return GroupResult(
         statistic=statistic,
@@ -416,8 +513,7 @@ def group_contrast(
 
     difference = a - b
     statistic, p_values = _pairwise_test(difference, method)
-    significant, threshold = benjamini_hochberg(p_values, alpha)
-    np.fill_diagonal(significant, False)
+    significant, threshold = _correct_off_diagonal(p_values, alpha)
 
     return GroupResult(
         statistic=statistic,

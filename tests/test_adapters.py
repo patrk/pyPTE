@@ -194,3 +194,35 @@ def test_interpolate_rejects_mismatched_sampling_rates():
 
     with pytest.raises(ValueError, match="sampling frequency"):
         interpolate_mne(raw, reference)
+
+
+# --------------------------------------------------------------------------
+# parameter passthrough
+# --------------------------------------------------------------------------
+
+
+def test_adapters_forward_binning_and_delay():
+    from pyPTE import PTE
+
+    data = coupled_signals()
+    expected, _ = PTE(data, binning=6, delay=10)
+
+    from_frame, _ = PTE_from_dataframe(
+        pd.DataFrame(data.T, columns=CHANNELS), binning=6, delay=10
+    )
+    from_mne, _ = PTE_from_mne(make_raw(data), binning=6, delay=10)
+
+    np.testing.assert_allclose(from_frame.to_numpy(), expected)
+    np.testing.assert_allclose(from_mne.to_numpy(), expected)
+
+
+def test_multi_process_forwards_parameters_quietly(capsys):
+    from pyPTE import PTE
+    from pyPTE.core.handle_multi import multi_process
+
+    data = coupled_signals(n=2000)
+    results = multi_process({"a": data}, binning=6, delay=10, n_jobs=1)
+
+    expected, _ = PTE(data, binning=6, delay=10)
+    np.testing.assert_allclose(results[0]["a"][0], expected)
+    assert capsys.readouterr().out == ""

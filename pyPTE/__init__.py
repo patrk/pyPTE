@@ -8,6 +8,7 @@ from pyPTE.stats import (
     group_contrast,
     group_test,
     surrogate_test,
+    surrogates_needed,
 )
 
 __version__ = "1.5.1"
@@ -22,5 +23,6 @@ __all__ = [
     "group_contrast",
     "group_test",
     "surrogate_test",
+    "surrogates_needed",
     "__version__",
 ]

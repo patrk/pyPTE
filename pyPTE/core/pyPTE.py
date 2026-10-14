@@ -4,7 +4,7 @@ import numpy as np
 import numpy.typing as npt
 from scipy.signal import hilbert
 
-BinningRule = Literal["scott", "hillebrand"] | int
+BinningRule = Literal["auto", "scott", "hillebrand"] | int
 DelayRule = Literal["zero-crossing", "phase-increment"] | int
 
 
@@ -105,6 +105,33 @@ def get_bincount_hillebrand(n_samples: int, delay: int) -> int:
     return max(int(round(np.exp(0.626 + 0.4 * np.log(usable)))), 2)
 
 
+def get_bincount_auto(n_samples: int, samples_per_cell: float = 20.0) -> int:
+    """
+    Bin count sized for the three-dimensional histogram PTE actually fills
+
+    The entropy estimates are biased by roughly the number of occupied cells
+    over twice the sample count, and the joint term spreads the samples over
+    up to n_bins ** 3 cells. Choosing n_bins = (n_samples / samples_per_cell)
+    ** (1/3) keeps the cube populated however long the recording is, where
+    Scott's rule, meant for a one-dimensional histogram, leaves about one
+    sample per cell and a bias of around 0.75 bits on unrelated signals.
+
+    Parameters
+    ----------
+    n_samples : int
+    samples_per_cell : float
+        average samples per cell of the full joint histogram
+
+    Returns
+    -------
+    bincount : int
+        at least 3
+    """
+    # the small offset keeps exact cubes such as 160000 / 20 = 20 ** 3 from
+    # rounding down through floating point
+    return max(int(np.floor((n_samples / samples_per_cell) ** (1 / 3) + 1e-9)), 3)
+
+
 def get_phase(time_series: npt.ArrayLike) -> npt.NDArray:
     """
     Computes phase from time series using a hilbert transform and computing the angles
@@ -193,7 +220,9 @@ def get_bincount(binsize: float) -> int:
     return bincount
 
 
-def _entropy(codes: npt.NDArray, n_samples: int) -> float:
+def _entropy(
+    codes: npt.NDArray, n_samples: int, bias_correction: bool = False
+) -> float:
     """
     Shannon entropy in bits of a discrete variable given its integer states
 
@@ -208,6 +237,9 @@ def _entropy(codes: npt.NDArray, n_samples: int) -> float:
         1-d array of non-negative integers, one state per sample
     n_samples : int
         number of samples the states were drawn from
+    bias_correction : bool
+        add the Miller-Madow term (occupied states - 1) / (2 n ln 2), which
+        removes the first-order underestimate of the plug-in estimator
 
     Returns
     -------
@@ -218,11 +250,17 @@ def _entropy(codes: npt.NDArray, n_samples: int) -> float:
     counts = counts[counts > 0]
     # -sum(p*log2(p)) with p = c/n, rearranged so no division happens per bin
     # and empty bins are dropped before the logarithm rather than after
-    return float(np.log2(n_samples) - (counts * np.log2(counts)).sum() / n_samples)
+    entropy = np.log2(n_samples) - (counts * np.log2(counts)).sum() / n_samples
+    if bias_correction:
+        entropy += (counts.size - 1) / (2 * n_samples * np.log(2))
+    return float(entropy)
 
 
 def compute_PTE(
-    phase: npt.NDArray, delay: int, n_bins: int | None = None
+    phase: npt.NDArray,
+    delay: int,
+    n_bins: int | None = None,
+    bias_correction: bool = False,
 ) -> npt.NDArray:
     """
     For each channel pair (x, y) containing the individual discretized phase,
@@ -245,16 +283,29 @@ def compute_PTE(
         pyPTE.pyPTE.get_delay(). A custom delay estimation can be used as well.
     n_bins : int, optional
         Number of bins over [0, 2*pi). If not given, inferred as int(phase.max()) + 1.
+    bias_correction : bool
+        apply the Miller-Madow correction to every entropy term, see _entropy
 
     Returns
     -------
     PTE : numpy.ndarray
         m x m matrix containing the PTE value for each channel pair
+
+    Raises
+    ------
+    ValueError
+        if a phase code falls outside 0 .. n_bins - 1, where joint states
+        would collide silently
     """
     m, n = phase.shape
     n_samples = n - delay
     if n_bins is None:
         n_bins = int(phase.max()) + 1
+    if phase.min() < 0 or phase.max() >= n_bins:
+        raise ValueError(
+            f"phase codes must lie in 0 .. {n_bins - 1}, got "
+            f"{int(phase.min())} .. {int(phase.max())}"
+        )
 
     # int64 keeps the three-digit code below the overflow limit for the bin
     # counts Scott's rule produces on realistically long recordings
@@ -269,8 +320,8 @@ def compute_PTE(
         y = y_all[j]
         ypr = ypr_all[j]
 
-        Hy = _entropy(y, n_samples)
-        Hypr_y = _entropy(ypr * n_bins + y, n_samples)
+        Hy = _entropy(y, n_samples, bias_correction)
+        Hypr_y = _entropy(ypr * n_bins + y, n_samples, bias_correction)
 
         # the source occupies the least significant digit, so everything above
         # it can be shifted once here and reused for every source channel
@@ -284,16 +335,24 @@ def compute_PTE(
                 continue
 
             x = y_all[i]
-            Hy_x = _entropy(y_shifted + x, n_samples)
-            Hypr_y_x = _entropy(ypr_y_shifted + x, n_samples)
+            Hy_x = _entropy(y_shifted + x, n_samples, bias_correction)
+            Hypr_y_x = _entropy(ypr_y_shifted + x, n_samples, bias_correction)
 
             PTE[i, j] = Hypr_y + Hy_x - Hy - Hypr_y_x
 
+    if not bias_correction:
+        # the plug-in estimate is never negative; summing four entropies leaves
+        # rounding noise around zero, e.g. for identical channels, which would
+        # otherwise turn 0/0 in dPTE into an arbitrary number
+        PTE[np.abs(PTE) < 1e-12] = 0.0
     return PTE
 
 
 def compute_dPTE_rawPTE(
-    phase: npt.NDArray, delay: int, n_bins: int | None = None
+    phase: npt.NDArray,
+    delay: int,
+    n_bins: int | None = None,
+    bias_correction: bool = False,
 ) -> tuple[npt.NDArray, npt.NDArray]:
     """
     This function calls pyPTE.pyPTE.compute_PTE to obtain a PTE matrix and performs a
@@ -315,17 +374,24 @@ def compute_dPTE_rawPTE(
     n_bins : int, optional
         Number of bins over [0, 2*pi). Passed to compute_PTE.
 
+    bias_correction : bool
+        passed to compute_PTE. Corrected values can dip below zero, so dPTE is
+        formed from them clipped at zero.
+
     Returns
     -------
     (dPTE, raw_PTE) : tuple of numpy.ndarray objects
-        dPTE : normalized PTE matrix, raw_PTE: original PTE values
+        dPTE : normalized PTE matrix, raw_PTE: original PTE values. dPTE is NaN
+        for pairs with no transfer in either direction, where it is 0/0.
 
     """
-    raw_PTE = compute_PTE(phase, delay, n_bins=n_bins)
+    raw_PTE = compute_PTE(phase, delay, n_bins=n_bins, bias_correction=bias_correction)
 
-    tmp = np.triu(raw_PTE) + np.tril(raw_PTE).T
+    transfer = np.clip(raw_PTE, 0.0, None)
+    total = transfer + transfer.T
     with np.errstate(divide="ignore", invalid="ignore"):
-        dPTE = np.triu(raw_PTE / tmp, 1) + np.tril(raw_PTE / tmp.T, -1)
+        dPTE = np.where(total > 0, transfer / total, np.nan)
+    np.fill_diagonal(dPTE, 0.0)
     return dPTE, raw_PTE
 
 
@@ -334,6 +400,7 @@ def PTE(
     *,
     binning: BinningRule = "scott",
     delay: DelayRule = "zero-crossing",
+    bias_correction: bool = False,
 ) -> tuple[npt.NDArray, npt.NDArray]:
     """
     Computes dPTE and raw PTE for every ordered channel pair
@@ -353,14 +420,22 @@ def PTE(
     ----------
     time_series : numpy.ndarray
         m x n ndarray : m: number of channels, n: number of samples
-    binning : {"scott", "hillebrand"} or int
-        "scott" sizes bins by Scott's rule, the default, which keeps roughly one
-        sample per histogram cell across a wide range of data lengths.
+    binning : {"scott", "auto", "hillebrand"} or int
+        "scott", the default, sizes bins by Scott's rule. The fine bins keep
+        the phase resolution dPTE depends on, and the estimator's bias cancels
+        in the dPTE ratio. Raw PTE under it is biased upwards, by about 0.75
+        bits on unrelated signals, so do not read raw values on their own.
+        "auto" sizes bins for the three-dimensional joint histogram (see
+        get_bincount_auto), which keeps raw PTE close to unbiased but blurs
+        phase and usually weakens dPTE. Use it when raw PTE in bits matters.
         "hillebrand" uses the bin count published in Hillebrand et al. 2016,
-        which is three to four times larger and correspondingly sparser.
-        An integer sets the number of bins over [0, 2*pi] directly.
+        which is finer still. An integer sets the number of bins directly.
     delay : {"zero-crossing", "phase-increment"} or int
         passed to pyPTE.core.pyPTE.get_delay; an integer is used as-is
+    bias_correction : bool
+        apply the Miller-Madow correction, which brings raw PTE on unrelated
+        signals to about zero. Use it when the size of raw PTE in bits matters.
+        It makes dPTE noisier, so leave it off when only direction matters.
 
     Returns
     -------
@@ -375,7 +450,10 @@ def PTE(
     phase_inc = phase + np.pi
     n_samples = phase_inc.shape[1]
 
-    if isinstance(binning, (int, np.integer)):
+    if binning == "auto":
+        n_bins = get_bincount_auto(n_samples - analysis_delay)
+        binsize = 2 * np.pi / n_bins
+    elif isinstance(binning, (int, np.integer)):
         if binning < 2:
             raise ValueError(f"binning needs at least 2 bins, got {binning}")
         n_bins = int(binning)
@@ -390,4 +468,6 @@ def PTE(
         raise ValueError(f"unknown binning rule {binning!r}")
 
     d_phase = get_discretized_phase(phase_inc, binsize, n_bins=n_bins)
-    return compute_dPTE_rawPTE(d_phase, analysis_delay, n_bins=n_bins)
+    return compute_dPTE_rawPTE(
+        d_phase, analysis_delay, n_bins=n_bins, bias_correction=bias_correction
+    )

@@ -1,7 +1,14 @@
+import warnings
+
 import numpy as np
 import pytest
 
-from pyPTE.stats import benjamini_hochberg, surrogate_test, time_shifted_surrogate
+from pyPTE.stats import (
+    benjamini_hochberg,
+    surrogate_test,
+    surrogates_needed,
+    time_shifted_surrogate,
+)
 
 FS = 250.0
 
@@ -133,6 +140,9 @@ def test_independent_matched_signals_are_not_significant():
     assert not result.significant.any()
 
 
+# these check plumbing rather than power, so a deliberately small
+# surrogate count is fine and the underpowered warning is not the point
+@pytest.mark.filterwarnings("ignore:.*cannot produce a p-value.*:RuntimeWarning")
 def test_result_shapes_and_diagonal():
     data = np.random.default_rng(0).standard_normal((4, 2000))
     result = surrogate_test(data, n_surrogates=20, seed=0)
@@ -154,6 +164,9 @@ def test_p_values_are_bounded_away_from_zero():
     assert (result.p_values <= 1.0).all()
 
 
+# these check plumbing rather than power, so a deliberately small
+# surrogate count is fine and the underpowered warning is not the point
+@pytest.mark.filterwarnings("ignore:.*cannot produce a p-value.*:RuntimeWarning")
 def test_null_distribution_is_optional():
     data = coupled_pair(n=2000)
 
@@ -170,6 +183,9 @@ def test_null_distribution_is_optional():
     np.testing.assert_allclose(with_null.p_values, without.p_values)
 
 
+# these check plumbing rather than power, so a deliberately small
+# surrogate count is fine and the underpowered warning is not the point
+@pytest.mark.filterwarnings("ignore:.*cannot produce a p-value.*:RuntimeWarning")
 def test_seed_makes_it_reproducible():
     data = coupled_pair()
     first = surrogate_test(data, n_surrogates=20, seed=42)
@@ -177,6 +193,9 @@ def test_seed_makes_it_reproducible():
     np.testing.assert_allclose(first.p_values, second.p_values)
 
 
+# these check plumbing rather than power, so a deliberately small
+# surrogate count is fine and the underpowered warning is not the point
+@pytest.mark.filterwarnings("ignore:.*cannot produce a p-value.*:RuntimeWarning")
 def test_summary_mentions_the_correction():
     result = surrogate_test(coupled_pair(), n_surrogates=20, seed=0)
     assert "Benjamini-Hochberg" in result.summary()
@@ -188,3 +207,104 @@ def test_rejects_bad_input():
         surrogate_test(np.zeros(10), n_surrogates=5)
     with pytest.raises(ValueError, match="at least 1"):
         surrogate_test(np.zeros((2, 100)), n_surrogates=0)
+
+
+# --------------------------------------------------------------------------
+# power arithmetic
+# --------------------------------------------------------------------------
+
+
+def test_surrogates_needed_scales_with_pairs():
+    """The floor is alpha / n_pairs, so the requirement grows quadratically."""
+    assert surrogates_needed(2) < surrogates_needed(20) < surrogates_needed(76)
+    # 76 channels is 2850 unordered pairs; p[i, j] == p[j, i], so each pair
+    # enters the correction twice and is accepted at rank 2: p <= 0.05 / 2850
+    assert surrogates_needed(76) == pytest.approx(2850 / 0.05 - 1, rel=1e-6)
+
+
+def test_surrogates_needed_handles_degenerate_input():
+    assert surrogates_needed(1) == 1
+    assert surrogates_needed(0) == 1
+
+
+def test_warns_when_no_edge_could_possibly_survive():
+    """The trap this exists to catch: a null result that was never reachable."""
+    data = np.random.default_rng(0).standard_normal((30, 500))
+
+    with pytest.warns(RuntimeWarning, match="cannot produce a p-value below"):
+        result = surrogate_test(data, n_surrogates=10, seed=0)
+
+    assert not result.significant.any()
+
+
+def test_no_warning_when_the_count_is_adequate():
+    data = independent_pair(n=2000)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        surrogate_test(data, n_surrogates=200, seed=0)
+
+
+def test_warning_names_a_usable_alternative():
+    data = np.random.default_rng(0).standard_normal((30, 500))
+    with pytest.warns(RuntimeWarning) as caught:
+        surrogate_test(data, n_surrogates=10, seed=0)
+
+    message = str(caught[0].message)
+    assert "cluster_permutation" in message
+    assert str(surrogates_needed(30)) in message
+
+
+@pytest.mark.parametrize("m", [2, 3, 5, 10])
+def test_surrogates_needed_is_the_exact_floor(m):
+    """At the returned count an isolated perfect edge survives; one fewer, not."""
+    from pyPTE.stats import _correct_off_diagonal
+
+    def survives(n_surrogates):
+        p = np.ones((m, m))
+        p[0, 1] = p[1, 0] = 1.0 / (n_surrogates + 1)
+        return bool(_correct_off_diagonal(p, 0.05)[0][0, 1])
+
+    n = surrogates_needed(m)
+    assert survives(n)
+    assert not survives(n - 1)
+
+
+def test_minimum_surrogate_count_detects_strong_coupling():
+    """End to end: the count surrogates_needed asks for must be enough."""
+    n = surrogates_needed(2)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        result = surrogate_test(coupled_pair(), n_surrogates=n, seed=0)
+    assert result.significant[0, 1] and result.significant[1, 0]
+
+
+def test_correction_ignores_the_diagonal():
+    """The diagonal is not a test; counting it makes the correction stricter."""
+    from pyPTE.stats import _correct_off_diagonal
+
+    m = 4
+    p = np.ones((m, m))
+    # passes BH over the 12 off-diagonal entries at rank 2, fails over all 16
+    p[0, 1] = p[1, 0] = 0.05 * 2 / 12
+    significant, _ = _correct_off_diagonal(p, 0.05)
+    assert significant[0, 1] and significant[1, 0]
+    assert not significant[np.eye(m, dtype=bool)].any()
+
+
+def test_nan_dpte_is_never_significant():
+    """A duplicated channel has zero PTE both ways, so dPTE is 0/0."""
+    data = coupled_pair()
+    data = np.vstack([data, data[0]])
+    with pytest.warns(RuntimeWarning, match="undefined"):
+        result = surrogate_test(data, n_surrogates=surrogates_needed(3), seed=0)
+    assert result.p_values[0, 2] == 1.0 and result.p_values[2, 0] == 1.0
+    assert not result.significant[0, 2] and not result.significant[2, 0]
+
+
+def test_surrogate_test_forwards_binning_and_delay():
+    data = coupled_pair()
+    from pyPTE import PTE
+
+    result = surrogate_test(data, n_surrogates=5, seed=0, binning=6, delay=10)
+    expected, _ = PTE(data, binning=6, delay=10)
+    np.testing.assert_allclose(result.dPTE, expected)
