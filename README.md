@@ -109,13 +109,21 @@ Steps 2 and 3 are not determined by the method, and both change the answer:
 PTE(signal, binning="scott", delay="zero-crossing")  # the defaults
 ```
 
-**`binning`** accepts `"scott"` (default), `"hillebrand"`, or an integer bin
-count. Worth knowing: Hillebrand et al. 2016 specify
+**`binning`** accepts `"scott"` (default), `"auto"`, `"hillebrand"`, or an
+integer bin count. Worth knowing: Hillebrand et al. 2016 specify
 `exp(0.626 + 0.4·ln(N_s − δ − 1))`, which is **3–4× more bins than Scott's rule**
-— 68 against 20 at 8,000 samples. pyPTE has always used Scott's rule, and that
-is kept as the default deliberately: at 68 bins the three-way histogram has
-314,000 cells for 8,000 samples and is hopelessly sparse, whereas Scott's rule
-holds roughly one sample per cell across a wide range of data lengths.
+— 68 against 20 at 8,000 samples. At 68 bins the three-way histogram has
+314,000 cells for 8,000 samples and is hopelessly sparse.
+
+Scott's rule stays the default because dPTE depends on fine phase resolution,
+but it leaves about one sample per cell of the three-way histogram. That biases
+**raw PTE** upwards: two unrelated signals report around 0.75 bits. The bias
+largely cancels in the dPTE ratio, so read dPTE as usual and never read raw PTE
+on its own. When the size of raw PTE in bits matters, use
+`PTE(signal, binning="auto", bias_correction=True)`: bins sized for the
+three-way histogram plus the Miller–Madow correction bring unrelated signals to
+about 0 bits. Don't use that setting for dPTE, where it blurs phase and weakens
+detection.
 
 It is not a cosmetic difference. On coupled signals Scott's rule reports
 `dPTE ≈ 0.68` where Hillebrand's reports `≈ 0.56`. Both agree on direction, and
