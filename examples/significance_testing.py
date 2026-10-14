@@ -1,4 +1,6 @@
-"""What a significance test actually does to a dPTE matrix.
+"""
+What a significance test actually does to a dPTE matrix.
+========================================================
 
 Three channels: A really drives C with a lag, B is independent of everything but
 much noisier. In the raw matrix both A -> C and A -> B look like findings, and
@@ -6,22 +8,22 @@ the artefact is the stronger of the two. Against their own nulls they separate
 cleanly, because B's noise raises its surrogate distribution just as much as it
 raises the observed value.
 
-Run with:
+Run with::
+
     uv run python -m examples.significance_testing [--quick]
 """
 
 import argparse
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-from examples.utils.plotting import plot_matrix, save, use_house_style
+from examples.utils import style
+from examples.utils.plotting import FIGURES, plot_matrix, save, use_house_style
 from pyPTE import surrogate_test
 
 FS = 250.0
 CHANNELS = ["A (driver)", "B (noisy, independent)", "C (driven by A)"]
-FIGURES = Path(__file__).resolve().parent / "figures"
 
 
 def oscillator(rng: np.random.Generator, n: int, freq: float = 10.0) -> np.ndarray:
@@ -48,8 +50,8 @@ def plot_null(ax, result, i: int, j: int, *, title: str) -> None:
     p = result.p_values[i, j]
     survives = bool(result.significant[i, j])
 
-    colour = "#2f6f9f" if survives else "#c2453f"
-    ax.hist(null, bins=20, color="#adb5bd", label="surrogate null")
+    colour = style.BLUE if survives else style.OBS
+    ax.hist(null, bins=20, color=style.NULL, label="surrogate null")
     ax.axvline(
         observed,
         color=colour,
@@ -110,12 +112,12 @@ def main(quick: bool = False) -> None:
     p_flat = np.sort(result.p_values[off_diagonal])
     ranks = np.arange(1, p_flat.size + 1)
     ax = axes[1, 0]
-    ax.plot(ranks, p_flat, "o-", color="#2f6f9f", ms=5, label="sorted p-values")
+    ax.plot(ranks, p_flat, "o-", color=style.BLUE, ms=5, label="sorted p-values")
     ax.plot(
         ranks,
         0.05 * ranks / p_flat.size,
         "--",
-        color="#c2453f",
+        color=style.OBS,
         label="BH threshold  0.05 k / n",
     )
     ax.set(
@@ -138,7 +140,6 @@ def main(quick: bool = False) -> None:
     )
     axes[1, 1].set_facecolor("#f1f3f5")
 
-    fig.suptitle("A surrogate test separates real coupling from an SNR artefact")
     save(fig, FIGURES / "significance_testing.png")
 
     print("\nraw dPTE (both A->B and A->C look like findings)")

@@ -51,7 +51,8 @@ tutorial/index
 guide/how-it-works
 guide/analysis
 guide/pitfalls
-examples
+examples/index
+examples_overview
 api
 contributing
 ```

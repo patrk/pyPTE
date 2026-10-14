@@ -1,0 +1,10 @@
+Examples
+========
+
+Each example builds a system whose directed connectivity is known in advance,
+runs pyPTE on it, and asserts that the result matches the ground truth. The
+documentation build runs every one of them, in a faster ``--quick`` mode, so a
+claim that stops being true fails the build.
+
+The Virtual Brain example needs heavy optional dependencies and is not run
+here; see :doc:`/tutorial/large_networks` for its result.

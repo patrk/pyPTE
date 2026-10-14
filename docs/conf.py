@@ -38,20 +38,25 @@ numpydoc_validation_checks: set[str] = set()
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
     "numpy": ("https://numpy.org/doc/stable", None),
-    "mne": ("https://mne.tools/stable", None),
 }
 
 
 sphinx_gallery_conf = {
-    "examples_dirs": ["tutorials"],
-    "gallery_dirs": ["tutorial"],
+    "examples_dirs": ["tutorials", "../examples"],
+    "gallery_dirs": ["tutorial", "examples"],
     # every script is a page; there is no plot_ naming convention to follow
     "filename_pattern": r".*\.py",
+    # tvb_connectome needs the optional tvb group; its result is cached for
+    # the flow_vs_anatomy tutorial instead
+    "ignore_pattern": r"__init__\.py|tvb_connectome\.py",
     "image_scrapers": ("pypte_docs.svg_scraper",),
+    "reset_argv": "pypte_docs.reset_argv",
     "within_subsection_order": "FileNameSortKey",
     "abort_on_example_error": True,
     "download_all_examples": False,
     "remove_config_comments": True,
+    # figures are captured as images; their repr would only add noise
+    "capture_repr": (),
 }
 
 html_theme = "pydata_sphinx_theme"

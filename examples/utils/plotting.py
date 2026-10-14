@@ -1,32 +1,33 @@
 """Shared plotting helpers so every example renders connectivity the same way."""
 
+import sys
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 
+from examples.utils import style
+
+# examples/figures, found from this module because sphinx-gallery runs the
+# example scripts without a __file__
+FIGURES = Path(__file__).resolve().parents[1] / "figures"
+
 # dPTE is centred on 0.5: below means net inflow, above means net outflow
-DIVERGING = "RdBu_r"
-SEQUENTIAL = "viridis"
+DIVERGING = style.DIV
+SEQUENTIAL = style.SEQ
 
 
 def use_house_style() -> None:
-    """Apply a consistent, readable style across every figure."""
+    """Apply the shared figure style, plus settings for standalone PNGs."""
+    style.use()
     plt.rcParams.update(
         {
             "figure.dpi": 110,
             "savefig.dpi": 150,
             "savefig.bbox": "tight",
-            "font.size": 9,
-            "axes.titlesize": 10,
-            "axes.labelsize": 9,
-            "axes.spines.top": False,
-            "axes.spines.right": False,
-            "axes.grid": True,
-            "grid.alpha": 0.25,
-            "legend.frameon": False,
             "image.origin": "upper",
         }
     )
@@ -38,7 +39,7 @@ def plot_matrix(
     *,
     title: str = "",
     labels: Sequence[str] | None = None,
-    cmap: str = DIVERGING,
+    cmap: Any = DIVERGING,
     vmin: float | None = None,
     vmax: float | None = None,
     center_on_half: bool = False,
@@ -76,13 +77,22 @@ def plot_matrix(
     if labels is not None and len(labels) <= 30:
         ax.set_xticks(range(len(labels)), labels, rotation=90)
         ax.set_yticks(range(len(labels)), labels)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
     if colorbar:
-        ax.figure.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
+        bar = ax.figure.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
+        bar.outline.set_visible(False)
     return image
 
 
 def save(fig: Any, path: Any) -> None:
-    """Write a figure and report where it landed."""
+    """Write a figure and report where it landed.
+
+    Inside a docs build sphinx-gallery captures open figures itself, so the
+    figure is left open and nothing is written to the repository.
+    """
+    if "sphinx_gallery" in sys.modules:
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path)
     plt.close(fig)

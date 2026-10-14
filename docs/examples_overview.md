@@ -1,4 +1,6 @@
-# Examples
+# Example index and related work
+
+The examples run as part of this site, see [the gallery](examples/index).
 
 Every example builds a system with known ground truth, runs `pyPTE`, and
 **asserts** the result. If an assertion fails, the claim it makes is no longer

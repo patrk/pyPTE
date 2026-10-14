@@ -1,4 +1,6 @@
-"""A two-condition analysis on short epochs, which is what M/EEG usually gives you.
+"""
+A two-condition analysis on short epochs, which is what M/EEG usually gives you.
+================================================================================
 
 Runs the whole pipeline: epoch, dPTE per epoch, group statistics, correction.
 Pooling over 25 one-second epochs beats a surrogate test on a much longer
@@ -12,23 +14,23 @@ component, which is what M/EEG reviewers usually expect.
 The last thing it shows is the catch: dPTE grows with path length, so indirect
 pairs outrank the real edges.
 
-Run with:
+Run with::
+
     uv run python -m examples.epoched_analysis [--quick]
 """
 
 import argparse
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-from examples.utils.plotting import plot_matrix, save, use_house_style
+from examples.utils import style
+from examples.utils.plotting import FIGURES, plot_matrix, save, use_house_style
 from pyPTE import PTE, cluster_permutation, group_contrast, group_test
 
 FS = 250.0
 EPOCH_SECONDS = 1.0
 LABELS = ["a", "b", "c", "d"]
-FIGURES = Path(__file__).resolve().parent / "figures"
 
 
 def oscillator(rng: np.random.Generator, n: int, freq: float = 10.0) -> np.ndarray:
@@ -120,7 +122,7 @@ def main(quick: bool = False) -> None:
         for j in range(i + 1, 4):
             hops.append(j - i)
             values.append(float(task[:, i, j].mean()))
-    axes[0, 1].scatter(hops, values, s=45, color="#c2453f", zorder=3)
+    axes[0, 1].scatter(hops, values, s=45, color=style.OBS, zorder=3)
     for distance in (1, 2, 3):
         mean_at = np.mean(
             [v for h, v in zip(hops, values, strict=True) if h == distance]
@@ -179,7 +181,7 @@ def main(quick: bool = False) -> None:
     )
     axes[1, 1].set_facecolor("#f1f3f5")
 
-    axes[1, 2].plot(epoch_counts, detected, "o-", color="#2f6f9f", lw=1.6)
+    axes[1, 2].plot(epoch_counts, detected, "o-", color=style.BLUE, lw=1.6)
     axes[1, 2].axhline(1.0, ls="--", lw=1, color="0.5")
     axes[1, 2].set(
         xlabel="epochs used",
@@ -188,7 +190,6 @@ def main(quick: bool = False) -> None:
         title="Epochs needed, at 1s each",
     )
 
-    fig.suptitle("An epoched, two-condition analysis from end to end")
     save(fig, FIGURES / "epoched_analysis.png")
 
     print("\nresults")

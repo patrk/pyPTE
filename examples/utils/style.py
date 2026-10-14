@@ -9,6 +9,7 @@ quiet axes. Colours have fixed roles so that every figure reads the same way:
 - ``NULL``: grey for reference distributions and "nothing here"
 - ``OBS``: red for the observed value or a true edge
 - ``BLUE``: the single accent for data that is not a null
+- ``AMBER``: a second category where one accent is not enough
 """
 
 from typing import Any
@@ -24,6 +25,8 @@ SURFACE = "#ffffff"
 NULL = "#b8b8b8"
 OBS = "#d6403f"
 BLUE = "#2a78d6"
+# a second category beside BLUE, e.g. "symmetric" or "missed"
+AMBER = "#c98500"
 
 SEQ = LinearSegmentedColormap.from_list(
     "pypte_seq", ["#ffffff", "#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#0d366b"]
@@ -36,7 +39,10 @@ DIV = LinearSegmentedColormap.from_list(
 WIDTH = 7.2
 
 RC: dict[str, Any] = {
-    "font.family": ["Helvetica", "Arial", "DejaVu Sans"],
+    # Helvetica on macOS, Liberation Sans (metric-compatible with Arial) on the
+    # Linux docs runner, DejaVu Sans as matplotlib's own last resort
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Helvetica", "Arial", "Liberation Sans", "DejaVu Sans"],
     "font.size": 9,
     "axes.labelsize": 9,
     "axes.titlesize": 9,
@@ -46,9 +52,12 @@ RC: dict[str, Any] = {
     "legend.fontsize": 8,
     "legend.frameon": False,
     "mathtext.fontset": "custom",
-    "mathtext.rm": "Helvetica",
-    "mathtext.it": "Helvetica:italic",
-    "mathtext.bf": "Helvetica:bold",
+    # maths follows the text face; symbols that face lacks, such as arrows,
+    # come from STIX sans rather than a placeholder box
+    "mathtext.rm": "sans",
+    "mathtext.it": "sans:italic",
+    "mathtext.bf": "sans:bold",
+    "mathtext.fallback": "stixsans",
     "axes.edgecolor": EDGE,
     "axes.labelcolor": INK,
     "xtick.color": QUIET,
