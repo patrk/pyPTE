@@ -126,7 +126,9 @@ def get_phase(time_series: npt.ArrayLike) -> npt.NDArray:
     return phase
 
 
-def get_discretized_phase(phase: npt.NDArray, binsize: float) -> npt.NDArray:
+def get_discretized_phase(
+    phase: npt.NDArray, binsize: float, n_bins: int | None = None
+) -> npt.NDArray:
     """
     Discretizes the phase series to rectangular bins
 
@@ -137,13 +139,18 @@ def get_discretized_phase(phase: npt.NDArray, binsize: float) -> npt.NDArray:
 
     binsize : float
 
+    n_bins : int, optional
+        Number of bins over [0, 2*pi). If not given, inferred from binsize.
+
     Returns
     -------
     d_phase : numpy.ndarray
         m x n ndarray : m: number of channels, n: number of samples
 
     """
-    d_phase = np.ceil(phase / binsize).astype(np.int32)
+    if n_bins is None:
+        n_bins = get_bincount(binsize)
+    d_phase = np.clip(np.floor(phase / binsize), 0, n_bins - 1).astype(np.int32)
     return d_phase
 
 
@@ -214,7 +221,9 @@ def _entropy(codes: npt.NDArray, n_samples: int) -> float:
     return float(np.log2(n_samples) - (counts * np.log2(counts)).sum() / n_samples)
 
 
-def compute_PTE(phase: npt.NDArray, delay: int) -> npt.NDArray:
+def compute_PTE(
+    phase: npt.NDArray, delay: int, n_bins: int | None = None
+) -> npt.NDArray:
     """
     For each channel pair (x, y) containing the individual discretized phase,
     which is obtained by pyPTE.pyPTE.get_discretized_phase,
@@ -234,6 +243,8 @@ def compute_PTE(phase: npt.NDArray, delay: int) -> npt.NDArray:
         This is the analysis delta, which is the number of samples in the past
         to be considered for x and y. Momentarily delay is estimated by
         pyPTE.pyPTE.get_delay(). A custom delay estimation can be used as well.
+    n_bins : int, optional
+        Number of bins over [0, 2*pi). If not given, inferred as int(phase.max()) + 1.
 
     Returns
     -------
@@ -242,7 +253,8 @@ def compute_PTE(phase: npt.NDArray, delay: int) -> npt.NDArray:
     """
     m, n = phase.shape
     n_samples = n - delay
-    n_bins = int(phase.max()) + 1
+    if n_bins is None:
+        n_bins = int(phase.max()) + 1
 
     # int64 keeps the three-digit code below the overflow limit for the bin
     # counts Scott's rule produces on realistically long recordings
@@ -281,7 +293,7 @@ def compute_PTE(phase: npt.NDArray, delay: int) -> npt.NDArray:
 
 
 def compute_dPTE_rawPTE(
-    phase: npt.NDArray, delay: int
+    phase: npt.NDArray, delay: int, n_bins: int | None = None
 ) -> tuple[npt.NDArray, npt.NDArray]:
     """
     This function calls pyPTE.pyPTE.compute_PTE to obtain a PTE matrix and performs a
@@ -300,13 +312,16 @@ def compute_dPTE_rawPTE(
         considered for x and y. Momentarily delay is estimated by
         pyPTE.pyPTE.get_delay(). A custom delay estimation can be used as well.
 
+    n_bins : int, optional
+        Number of bins over [0, 2*pi). Passed to compute_PTE.
+
     Returns
     -------
     (dPTE, raw_PTE) : tuple of numpy.ndarray objects
         dPTE : normalized PTE matrix, raw_PTE: original PTE values
 
     """
-    raw_PTE = compute_PTE(phase, delay)
+    raw_PTE = compute_PTE(phase, delay, n_bins=n_bins)
 
     tmp = np.triu(raw_PTE) + np.tril(raw_PTE).T
     with np.errstate(divide="ignore", invalid="ignore"):
@@ -363,13 +378,16 @@ def PTE(
     if isinstance(binning, (int, np.integer)):
         if binning < 2:
             raise ValueError(f"binning needs at least 2 bins, got {binning}")
-        binsize = 2 * np.pi / int(binning)
+        n_bins = int(binning)
+        binsize = 2 * np.pi / n_bins
     elif binning == "scott":
         binsize = get_binsize(phase_inc)
+        n_bins = get_bincount(binsize)
     elif binning == "hillebrand":
-        binsize = 2 * np.pi / get_bincount_hillebrand(n_samples, analysis_delay)
+        n_bins = get_bincount_hillebrand(n_samples, analysis_delay)
+        binsize = 2 * np.pi / n_bins
     else:
         raise ValueError(f"unknown binning rule {binning!r}")
 
-    d_phase = get_discretized_phase(phase_inc, binsize)
-    return compute_dPTE_rawPTE(d_phase, analysis_delay)
+    d_phase = get_discretized_phase(phase_inc, binsize, n_bins=n_bins)
+    return compute_dPTE_rawPTE(d_phase, analysis_delay, n_bins=n_bins)
