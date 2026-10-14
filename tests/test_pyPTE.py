@@ -73,6 +73,20 @@ def test_get_discretized_phase():
     np.testing.assert_array_equal(discretized_phase, np.array([1, 2, 3]))
 
 
+def test_get_discretized_phase_uses_bin_zero():
+    # phase in [0, binsize) must fall into bin 0, and upper boundary clips to n_bins - 1
+    phase_data = np.array([0.0, np.pi / 8, np.pi / 4, 2 * np.pi])
+    discretized = get_discretized_phase(phase_data, np.pi / 4, n_bins=8)
+    np.testing.assert_array_equal(discretized, np.array([0, 0, 1, 7]))
+
+
+def test_compute_PTE_accepts_explicit_n_bins():
+    phase_mock = np.array([[0, 1, 2, 3, 0, 1], [1, 2, 0, 1, 2, 0]])
+    pte = compute_PTE(phase_mock, delay=1, n_bins=4)
+    assert pte.shape == (2, 2)
+    assert np.isfinite(pte).all()
+
+
 def test_function_shapes():
     time_series = np.random.default_rng(0).random((4, 1500))
 
