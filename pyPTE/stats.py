@@ -243,7 +243,7 @@ def surrogate_test(
 
     Significance is two-tailed in spirit but computed one-sided on the distance
     from 0.5, because dPTE is antisymmetric: evidence that i drives j is the
-    same evidence that j does not drive i, and testing |dPTE - 0.5| keeps the
+    same evidence that j does not drive i, and testing ``|dPTE - 0.5|`` keeps the
     two directions from being counted as independent findings.
 
     Parameters

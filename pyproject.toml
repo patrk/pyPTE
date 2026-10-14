@@ -53,6 +53,14 @@ dev = [
     "ruff>=0.6",
     "python-semantic-release>=9",
 ]
+docs = [
+    "matplotlib>=3.11.1",
+    "myst-parser>=5.1.0",
+    "numpydoc>=1.11.0",
+    "pydata-sphinx-theme>=0.23.0",
+    "sphinx>=9.0.4",
+    "sphinx-gallery>=0.22.1",
+]
 examples = [
     "matplotlib>=3.8",
 ]

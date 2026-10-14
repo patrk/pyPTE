@@ -406,6 +406,7 @@ def PTE(
     Computes dPTE and raw PTE for every ordered channel pair
 
     The procedure is:
+
     1. Compute the phase with a Hilbert transform, on the interval [-pi, pi[
     2. Estimate the analysis delay
     3. Shift the phase so there are no negative values, then bin it
