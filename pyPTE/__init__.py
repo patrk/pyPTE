@@ -10,7 +10,7 @@ from pyPTE.stats import (
     surrogate_test,
 )
 
-__version__ = "1.5.0"
+__version__ = "1.5.1"
 
 __all__ = [
     "PTE",
