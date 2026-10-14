@@ -223,3 +223,55 @@ def test_cluster_rejects_bad_input():
         cluster_permutation(np.zeros((1, 3, 3)), n_permutations=10)
     with pytest.raises(ValueError, match="matching shapes"):
         cluster_permutation(np.zeros((5, 3, 3)), np.zeros((4, 3, 3)), n_permutations=10)
+
+
+def test_cluster_result_n_significant_clusters_respects_alpha():
+    from pyPTE.stats import ClusterResult
+
+    res_default = ClusterResult(
+        statistic=np.zeros((3, 3)),
+        clusters=[np.ones((3, 3), dtype=bool), np.ones((3, 3), dtype=bool)],
+        cluster_p=np.array([0.03, 0.08]),
+        significant=np.zeros((3, 3), dtype=bool),
+        threshold=2.0,
+        n_permutations=100,
+    )
+    assert res_default.alpha == 0.05
+    assert res_default.n_significant_clusters == 1
+
+    res_custom = ClusterResult(
+        statistic=np.zeros((3, 3)),
+        clusters=[np.ones((3, 3), dtype=bool), np.ones((3, 3), dtype=bool)],
+        cluster_p=np.array([0.03, 0.08]),
+        significant=np.zeros((3, 3), dtype=bool),
+        threshold=2.0,
+        n_permutations=100,
+        alpha=0.10,
+    )
+    assert res_custom.alpha == 0.10
+    assert res_custom.n_significant_clusters == 2
+
+    res_strict = ClusterResult(
+        statistic=np.zeros((3, 3)),
+        clusters=[np.ones((3, 3), dtype=bool), np.ones((3, 3), dtype=bool)],
+        cluster_p=np.array([0.03, 0.08]),
+        significant=np.zeros((3, 3), dtype=bool),
+        threshold=2.0,
+        n_permutations=100,
+        alpha=0.01,
+    )
+    assert res_strict.alpha == 0.01
+    assert res_strict.n_significant_clusters == 0
+
+
+def test_cluster_permutation_stores_alpha_on_result():
+    flat = np.full((10, 4, 4), 0.5)
+    empty_res = cluster_permutation(flat, n_permutations=50, alpha=0.01, seed=0)
+    assert empty_res.alpha == 0.01
+    assert empty_res.n_significant_clusters == 0
+
+    data = chain_matrices(30, 250, 0.9)
+    res = cluster_permutation(data, n_permutations=100, alpha=0.10, seed=0)
+    assert res.alpha == 0.10
+    assert res.n_significant_clusters == int((res.cluster_p <= 0.10).sum())
+

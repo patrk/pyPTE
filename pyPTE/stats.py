@@ -448,6 +448,8 @@ class ClusterResult:
     threshold : float
         the cluster-forming t-threshold that was applied
     n_permutations : int
+    alpha : float
+        the cluster-level significance threshold that was applied
     """
 
     statistic: npt.NDArray
@@ -456,10 +458,11 @@ class ClusterResult:
     significant: npt.NDArray
     threshold: float
     n_permutations: int
+    alpha: float = 0.05
 
     @property
     def n_significant_clusters(self) -> int:
-        return int((self.cluster_p <= 0.05).sum())
+        return int((self.cluster_p <= self.alpha).sum())
 
     def summary(self) -> str:
         if not self.clusters:
@@ -605,6 +608,7 @@ def cluster_permutation(
             significant=np.zeros_like(observed, dtype=bool),
             threshold=threshold,
             n_permutations=n_permutations,
+            alpha=alpha,
         )
 
     # sign flipping is the exchangeability the paired and one-sample designs
@@ -635,4 +639,5 @@ def cluster_permutation(
         significant=significant,
         threshold=threshold,
         n_permutations=n_permutations,
+        alpha=alpha,
     )
