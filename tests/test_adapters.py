@@ -226,3 +226,57 @@ def test_multi_process_forwards_parameters_quietly(capsys):
     expected, _ = PTE(data, binning=6, delay=10, trim_cycles=1)
     np.testing.assert_allclose(results[0]["a"][0], expected)
     assert capsys.readouterr().out == ""
+
+
+def test_multi_process_rejects_a_zero_worker_count():
+    from pyPTE.core.handle_multi import multi_process
+
+    with pytest.raises(ValueError, match="n_jobs"):
+        multi_process({"a": coupled_signals(n=500)}, n_jobs=0)
+
+
+# --------------------------------------------------------------------------
+# epochs
+# --------------------------------------------------------------------------
+
+
+def make_epochs(n_epochs=30, n_times=250, seed=0):
+    rng = np.random.default_rng(seed)
+    epochs = [
+        coupled_signals(n=n_times, seed=int(rng.integers(1 << 31)))
+        for _ in range(n_epochs)
+    ]
+    info = mne.create_info(CHANNELS, sfreq=FS, ch_types="eeg")
+    return mne.EpochsArray(np.array(epochs), info, verbose=False)
+
+
+def test_epochs_give_one_matrix_per_epoch_ready_for_group_tests():
+    from pyPTE import group_test
+    from pyPTE.adapters.mne_adapter import PTE_from_epochs
+
+    dPTE, raw = PTE_from_epochs(make_epochs())
+
+    assert dPTE.shape == raw.shape == (30, 3, 3)
+    result = group_test(dPTE)
+    assert result.significant[0, 1] and result.effect[0, 1] > 0.5
+
+
+def test_epochs_share_one_delay_and_bin_count():
+    from pyPTE.adapters.mne_adapter import PTE_from_epochs
+    from pyPTE.core.pyPTE import compute_dPTE_rawPTE, prepare_phase
+
+    epochs = make_epochs(n_epochs=6)
+    data = epochs.get_data()
+    stacked, delay, n_bins = prepare_phase(data.reshape(-1, data.shape[2]))
+    first, _ = compute_dPTE_rawPTE(stacked[:3], delay, n_bins=n_bins)
+
+    dPTE, _ = PTE_from_epochs(epochs)
+    np.testing.assert_array_equal(dPTE[0], first)
+
+
+def test_epochs_respect_picks_and_parameters():
+    from pyPTE.adapters.mne_adapter import PTE_from_epochs
+
+    epochs = make_epochs(n_epochs=4)
+    dPTE, _ = PTE_from_epochs(epochs, picks=["driver", "target"], binning=6, delay=10)
+    assert dPTE.shape == (4, 2, 2)

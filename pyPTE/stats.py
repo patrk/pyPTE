@@ -13,9 +13,12 @@ depends on. Whatever survives is a property of the interaction rather than of
 the individual channels.
 """
 
+import os
 import warnings
+from collections.abc import Iterator
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
-from itertools import product
+from itertools import product, repeat
 from typing import Literal, TypeVar
 
 import numpy as np
@@ -122,14 +125,49 @@ def time_shifted_surrogate(
         cross-channel timing
     """
     m, n = time_series.shape
+    return _apply_shifts(time_series, _draw_shifts(m, n, rng, min_fraction))
+
+
+def _draw_shifts(
+    m: int, n: int, rng: np.random.Generator, min_fraction: float = 0.05
+) -> npt.NDArray[np.int64]:
+    """One random circular shift per channel, as time_shifted_surrogate draws."""
     low = max(int(n * min_fraction), 1)
     high = max(n - low, low + 1)
-    shifts = rng.integers(low, high, size=m)
+    return rng.integers(low, high, size=m)
 
+
+def _apply_shifts(
+    time_series: npt.NDArray[_Scalar], shifts: npt.NDArray[np.int64]
+) -> npt.NDArray[_Scalar]:
     surrogate = np.empty_like(time_series)
-    for channel in range(m):
+    for channel in range(time_series.shape[0]):
         surrogate[channel] = np.roll(time_series[channel], shifts[channel])
     return surrogate
+
+
+def _surrogate_block(
+    d_phase: npt.NDArray[np.int32],
+    delay: int,
+    n_bins: int,
+    shifts: npt.NDArray[np.int64],
+) -> npt.NDArray[np.float64]:
+    """dPTE for one surrogate per row of shifts; a worker task for n_jobs."""
+    m = d_phase.shape[0]
+    block = np.empty((len(shifts), m, m))
+    for row, channel_shifts in enumerate(shifts):
+        block[row], _ = compute_dPTE_rawPTE(
+            _apply_shifts(d_phase, channel_shifts), delay, n_bins=n_bins
+        )
+    return block
+
+
+def _worker_count(n_jobs: int) -> int:
+    if n_jobs == -1:
+        return os.cpu_count() or 1
+    if n_jobs < 1:
+        raise ValueError(f"n_jobs must be a positive count or -1, got {n_jobs}")
+    return n_jobs
 
 
 def surrogates_needed(n_channels: int, alpha: float = 0.05) -> int:
@@ -251,6 +289,7 @@ def surrogate_test(
     binning: BinningRule = "scott",
     delay: DelayRule = "zero-crossing",
     trim_cycles: float = 0.0,
+    n_jobs: int = 1,
 ) -> SignificanceResult:
     """Test every directed channel pair against a time-shifted surrogate null.
 
@@ -279,6 +318,10 @@ def surrogate_test(
         as for `PTE`. The delay and bins are estimated once, from the observed
         data, and every surrogate reuses them, so the null is computed with
         exactly the settings of the value it is compared against.
+    n_jobs : int
+        worker processes for the surrogates; -1 uses every CPU. Results do not
+        depend on it: the shifts are drawn up front from ``seed``. Starting
+        workers costs about a second, so it pays off on large montages.
 
     Returns
     -------
@@ -289,6 +332,7 @@ def surrogate_test(
         raise ValueError(f"expected an m x n array, got shape {observed.shape}")
     if n_surrogates < 1:
         raise ValueError("n_surrogates must be at least 1")
+    workers = _worker_count(n_jobs)
 
     warn_if_underpowered(observed.shape[0], n_surrogates, alpha)
 
@@ -319,22 +363,41 @@ def surrogate_test(
         np.empty((n_surrogates, *dPTE.shape), dtype=float) if keep_null else None
     )
 
-    for index in range(n_surrogates):
-        # shifting the binned phase rather than the raw signal keeps the seam
-        # out of the Hilbert transform, and saves one transform per surrogate
-        surrogate_dPTE, _ = compute_dPTE_rawPTE(
-            time_shifted_surrogate(d_phase, rng), analysis_delay, n_bins=n_bins
-        )
-        surrogate_effect = np.abs(surrogate_dPTE - 0.5)
-        # an undefined surrogate is counted as extreme, the conservative side
-        at_least_as_extreme += (surrogate_effect >= observed_effect) | np.isnan(
-            surrogate_effect
-        )
-        null_total += surrogate_dPTE
-        if null_distribution is not None:
-            null_distribution[index] = surrogate_dPTE
-        if progress and (index + 1) % 25 == 0:
-            print(f"  surrogate {index + 1}/{n_surrogates}")
+    # shifting the binned phase rather than the raw signal keeps the seam out
+    # of the Hilbert transform. Drawing every shift here, in order, makes the
+    # null identical however many workers compute it.
+    m, n = d_phase.shape
+    shifts = np.array([_draw_shifts(m, n, rng) for _ in range(n_surrogates)])
+
+    def blocks() -> Iterator[npt.NDArray[np.float64]]:
+        if workers == 1:
+            for row in shifts:
+                yield _surrogate_block(d_phase, analysis_delay, n_bins, row[None])
+            return
+        chunks = np.array_split(shifts, min(4 * workers, n_surrogates))
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            yield from pool.map(
+                _surrogate_block,
+                repeat(d_phase),
+                repeat(analysis_delay),
+                repeat(n_bins),
+                chunks,
+            )
+
+    index = 0
+    for block in blocks():
+        for surrogate_dPTE in block:
+            surrogate_effect = np.abs(surrogate_dPTE - 0.5)
+            # an undefined surrogate is counted as extreme, the conservative side
+            at_least_as_extreme += (surrogate_effect >= observed_effect) | np.isnan(
+                surrogate_effect
+            )
+            null_total += surrogate_dPTE
+            if null_distribution is not None:
+                null_distribution[index] = surrogate_dPTE
+            index += 1
+            if progress and index % 25 == 0:
+                print(f"  surrogate {index}/{n_surrogates}")
 
     # the +1 in both terms keeps p strictly positive: with a finite null we can
     # never claim a p-value smaller than 1 / (n_surrogates + 1)

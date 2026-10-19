@@ -56,7 +56,8 @@ def multi_process(
     binning, delay, trim_cycles
         passed to pyPTE.PTE for every measurement
     n_jobs : int | None
-        worker processes; every CPU by default, 1 runs in this process
+        worker processes; every CPU by default or with -1, and 1 runs in this
+        process
 
     Returns
     -------
@@ -70,5 +71,8 @@ def multi_process(
     items = list(measurements.items())
     if n_jobs == 1:
         return [worker(item) for item in items]
-    with Pool(processes=n_jobs or cpu_count()) as pool:
+    if n_jobs is not None and n_jobs != -1 and n_jobs < 1:
+        raise ValueError(f"n_jobs must be a positive count or -1, got {n_jobs}")
+    processes = cpu_count() if n_jobs in (None, -1) else n_jobs
+    with Pool(processes=processes) as pool:
         return pool.map(worker, items)

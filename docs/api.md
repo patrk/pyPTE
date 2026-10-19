@@ -30,10 +30,12 @@
 
 ## Adapters
 
-These return labelled `pandas.DataFrame` results.
+`PTE_from_mne` and `PTE_from_dataframe` return labelled `pandas.DataFrame`
+results; `PTE_from_epochs` returns one matrix per epoch, ready for the group tests.
 
 ```{eval-rst}
 .. autofunction:: pyPTE.adapters.mne_adapter.PTE_from_mne
+.. autofunction:: pyPTE.adapters.mne_adapter.PTE_from_epochs
 .. autofunction:: pyPTE.adapters.mne_adapter.interpolate_mne
 .. autofunction:: pyPTE.adapters.pandas_adapter.PTE_from_dataframe
 .. autofunction:: pyPTE.core.handle_multi.multi_process

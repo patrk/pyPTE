@@ -353,3 +353,16 @@ def test_independent_signals_give_roughly_uniform_p_values():
     ]
     assert 0.02 <= np.mean(np.asarray(p) <= 0.1) <= 0.25
     assert 0.35 <= np.mean(p) <= 0.65
+
+
+def test_parallel_surrogates_match_serial_ones():
+    data = coupled_pair()
+    serial = surrogate_test(data, n_surrogates=19, seed=0, keep_null=True)
+    parallel = surrogate_test(data, n_surrogates=19, seed=0, keep_null=True, n_jobs=2)
+    np.testing.assert_array_equal(parallel.p_values, serial.p_values)
+    np.testing.assert_array_equal(parallel.null_distribution, serial.null_distribution)
+
+
+def test_n_jobs_must_be_positive_or_minus_one():
+    with pytest.raises(ValueError, match="n_jobs"):
+        surrogate_test(coupled_pair(), n_surrogates=5, n_jobs=0)
