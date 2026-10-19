@@ -4,6 +4,7 @@
 
 ```{eval-rst}
 .. autofunction:: pyPTE.PTE
+.. autofunction:: pyPTE.core.pyPTE.prepare_phase
 .. autofunction:: pyPTE.core.pyPTE.compute_dPTE_rawPTE
 .. autofunction:: pyPTE.core.pyPTE.get_bincount_auto
 ```
