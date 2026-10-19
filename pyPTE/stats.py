@@ -65,14 +65,14 @@ class SignificanceResult:
         surrogate matrix in memory.
     """
 
-    dPTE: npt.NDArray
-    raw_PTE: npt.NDArray
-    p_values: npt.NDArray
-    significant: npt.NDArray
+    dPTE: npt.NDArray[np.float64]
+    raw_PTE: npt.NDArray[np.float64]
+    p_values: npt.NDArray[np.float64]
+    significant: npt.NDArray[np.bool_]
     threshold: float
-    null_mean: npt.NDArray
+    null_mean: npt.NDArray[np.float64]
     n_surrogates: int
-    null_distribution: npt.NDArray | None = None
+    null_distribution: npt.NDArray[np.float64] | None = None
 
     @property
     def n_significant(self) -> int:
@@ -89,8 +89,11 @@ class SignificanceResult:
 
 
 def time_shifted_surrogate(
-    time_series: npt.NDArray, rng: np.random.Generator, *, min_fraction: float = 0.05
-) -> npt.NDArray:
+    time_series: npt.NDArray[np.float64],
+    rng: np.random.Generator,
+    *,
+    min_fraction: float = 0.05,
+) -> npt.NDArray[np.float64]:
     """Circularly shift every channel by an independent random offset.
 
     Parameters
@@ -175,8 +178,8 @@ def warn_if_underpowered(
 
 
 def benjamini_hochberg(
-    p_values: npt.NDArray, alpha: float = 0.05
-) -> tuple[npt.NDArray, float]:
+    p_values: npt.NDArray[np.float64], alpha: float = 0.05
+) -> tuple[npt.NDArray[np.bool_], float]:
     """Control the false discovery rate across a family of p-values.
 
     Bonferroni is the wrong instrument here: a 100-channel recording yields 9900
@@ -212,8 +215,8 @@ def benjamini_hochberg(
 
 
 def _correct_off_diagonal(
-    p_values: npt.NDArray, alpha: float
-) -> tuple[npt.NDArray, float]:
+    p_values: npt.NDArray[np.float64], alpha: float
+) -> tuple[npt.NDArray[np.bool_], float]:
     """Benjamini-Hochberg over the off-diagonal entries of an m x m matrix.
 
     The diagonal is self-transfer, never a test, so letting it into the family
@@ -359,11 +362,11 @@ class GroupResult:
         which test was applied
     """
 
-    statistic: npt.NDArray
-    p_values: npt.NDArray
-    significant: npt.NDArray
+    statistic: npt.NDArray[np.float64]
+    p_values: npt.NDArray[np.float64]
+    significant: npt.NDArray[np.bool_]
     threshold: float
-    effect: npt.NDArray
+    effect: npt.NDArray[np.float64]
     n_observations: int
     method: str
 
@@ -381,8 +384,8 @@ class GroupResult:
 
 
 def _pairwise_test(
-    samples: npt.NDArray, method: str, alternative: str = "two-sided"
-) -> tuple[npt.NDArray, npt.NDArray]:
+    samples: npt.NDArray[np.float64], method: str, alternative: str = "two-sided"
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """Apply a one-sample test independently to every ordered channel pair."""
     n_obs, m, _ = samples.shape
     statistic = np.zeros((m, m))
@@ -548,10 +551,10 @@ class ClusterResult:
         the cluster-level significance threshold that was applied
     """
 
-    statistic: npt.NDArray
-    clusters: list[npt.NDArray]
-    cluster_p: npt.NDArray
-    significant: npt.NDArray
+    statistic: npt.NDArray[np.float64]
+    clusters: list[npt.NDArray[np.bool_]]
+    cluster_p: npt.NDArray[np.float64]
+    significant: npt.NDArray[np.bool_]
     threshold: float
     n_permutations: int
     alpha: float = 0.05
@@ -575,19 +578,19 @@ class ClusterResult:
         )
 
 
-def _edgewise_t(samples: npt.NDArray) -> npt.NDArray:
+def _edgewise_t(samples: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
     """One-sample t-statistic per edge, with zero-variance edges set to zero."""
     n = samples.shape[0]
     mean = samples.mean(axis=0)
     sd = samples.std(axis=0, ddof=1)
     with np.errstate(divide="ignore", invalid="ignore"):
-        t = mean / (sd / np.sqrt(n))
+        t: npt.NDArray[np.float64] = mean / (sd / np.sqrt(n))
     return np.nan_to_num(t, nan=0.0, posinf=0.0, neginf=0.0)
 
 
 def _find_clusters(
-    statistic: npt.NDArray, threshold: float
-) -> tuple[list[npt.NDArray], npt.NDArray]:
+    statistic: npt.NDArray[np.float64], threshold: float
+) -> tuple[list[npt.NDArray[np.bool_]], npt.NDArray[np.float64]]:
     """Connected components of the supra-threshold edges, and their masses.
 
     Positive and negative effects are clustered separately, so an increase and
@@ -599,7 +602,7 @@ def _find_clusters(
     m = statistic.shape[0]
     off_diagonal = ~np.eye(m, dtype=bool)
 
-    clusters: list[npt.NDArray] = []
+    clusters: list[npt.NDArray[np.bool_]] = []
     masses: list[float] = []
 
     for sign in (1.0, -1.0):

@@ -22,10 +22,7 @@ jobs:
       - uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
-      # --frozen, not --locked: the release commit bumps the version in
-      # pyproject.toml but not in uv.lock, so --locked fails on every push
-      # after a release. --frozen installs from the lock as it stands.
-      - run: uv sync --frozen --all-extras
+      - run: uv sync --locked --all-extras
       - name: ruff check
         run: uv run ruff check .
       - name: ruff format
@@ -39,19 +36,34 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.11', '3.12', '3.13']
+        python-version: ['3.11', '3.12', '3.13', '3.14']
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
           python-version: ${{ matrix.python-version }}
-      # --frozen, not --locked: the release commit bumps the version in
-      # pyproject.toml but not in uv.lock, so --locked fails on every push
-      # after a release. --frozen installs from the lock as it stands.
-      - run: uv sync --frozen --all-extras
+      - run: uv sync --locked --all-extras
       - name: pytest
         run: uv run pytest --cov=pyPTE --cov-report=term-missing
+
+  test-minimum:
+    name: test (minimum versions, py3.11)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+          python-version: '3.11'
+      # installs the oldest release every lower bound allows, so the floors in
+      # pyproject.toml are tested rather than assumed. Not from uv.lock: the lock
+      # resolves all groups together, and the docs group alone lifts numpy past
+      # its floor. 3.11 because numpy 1.24 has no wheels for later Pythons.
+      - run: uv venv
+      - run: uv pip install --resolution lowest-direct -e ".[mne]" --group test
+      - name: pytest
+        run: uv run --no-sync pytest
 
   build:
     name: build distributions
@@ -71,7 +83,7 @@ jobs:
 
   release:
     name: release
-    needs: [lint, test, build]
+    needs: [lint, test, test-minimum, build]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     environment:
@@ -93,20 +105,16 @@ jobs:
         with:
           enable-cache: true
 
-      # `build: false` because this action runs in a container without uv, so
-      # the configured build_command cannot execute here
-      - name: Determine and tag next version
+      # the CLI rather than the action: the action's container has no uv, and
+      # build_command needs it to update uv.lock in the release commit
+      - name: Version, changelog, tag and GitHub release
         id: release
-        uses: python-semantic-release/python-semantic-release@v10.6.1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          git_committer_name: github-actions[bot]
-          git_committer_email: 41898282+github-actions[bot]@users.noreply.github.com
-          build: false
-
-      - name: Build distributions
-        if: steps.release.outputs.released == 'true'
-        run: uv build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          uvx --from python-semantic-release==10.6.1 semantic-release -v version
 
       - name: Publish to PyPI
         if: steps.release.outputs.released == 'true'
@@ -114,7 +122,6 @@ jobs:
 
       - name: Attach distributions to the GitHub release
         if: steps.release.outputs.released == 'true'
-        uses: python-semantic-release/publish-action@v10.6.1
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ steps.release.outputs.tag }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: uvx --from python-semantic-release==10.6.1 semantic-release publish

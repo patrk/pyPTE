@@ -1,4 +1,5 @@
-from typing import Any
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
@@ -6,8 +7,13 @@ import pandas as pd
 from pyPTE.core import pyPTE
 from pyPTE.core.pyPTE import BinningRule, DelayRule
 
+if TYPE_CHECKING:
+    # mne ships no type information, so this documents intent for readers and
+    # editors; mypy sees Any
+    from mne.io import BaseRaw
 
-def interpolate_mne(raw: Any, raw_reference: Any) -> Any:
+
+def interpolate_mne(raw: "BaseRaw", raw_reference: "BaseRaw") -> "BaseRaw":
     """
     Restores channels missing from a recording by interpolating them
 
@@ -67,8 +73,8 @@ def interpolate_mne(raw: Any, raw_reference: Any) -> Any:
 
 
 def PTE_from_mne(
-    raw: Any,
-    picks: Any = None,
+    raw: "BaseRaw",
+    picks: str | Sequence[str | int] | slice | None = None,
     *,
     binning: BinningRule = "scott",
     delay: DelayRule = "zero-crossing",

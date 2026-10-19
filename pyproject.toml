@@ -24,6 +24,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering",
     "Typing :: Typed",
 ]
@@ -46,9 +47,15 @@ Issues = "https://github.com/patrk/pyPTE/issues"
 Changelog = "https://github.com/patrk/pyPTE/blob/main/CHANGELOG.md"
 
 [dependency-groups]
-dev = [
+# kept apart from dev so the minimum-versions CI job installs only what the
+# test suite needs
+test = [
     "pytest>=8",
     "pytest-cov>=5",
+    "hypothesis>=6.100",
+]
+dev = [
+    { include-group = "test" },
     "mypy>=1.9",
     "ruff>=0.6",
     "python-semantic-release>=9",
@@ -88,6 +95,10 @@ include = ["pyPTE", "tests", "README.md", "LICENSE", "CHANGELOG.md"]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 
+[tool.coverage.report]
+# applies whenever pytest runs with --cov, as CI does
+fail_under = 95
+
 [tool.ruff]
 line-length = 88
 target-version = "py311"
@@ -103,16 +114,27 @@ known-first-party = ["pyPTE"]
 # no python_version pin: numpy's bundled stubs use PEP 695 syntax that mypy
 # only parses when targeting 3.12+, so this follows the interpreter instead.
 # Real 3.11 compatibility is covered by the test matrix, which runs the code.
-check_untyped_defs = true
+strict = true
 ignore_missing_imports = true
-warn_unused_ignores = true
-warn_redundant_casts = true
-warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+# test functions take fixtures and return nothing; annotating each one adds
+# noise without catching anything. Their bodies are still type-checked.
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_untyped_calls = false
+disallow_incomplete_defs = false
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
 version_variables = ["pyPTE/__init__.py:__version__"]
-build_command = "uv build"
+# the version bump changes pyPTE's own entry in uv.lock, so the lock is updated
+# and committed with it; otherwise CI could not install with --locked
+build_command = """
+    uv lock --upgrade-package pyPTE
+    git add uv.lock
+    uv build
+"""
 
 [tool.semantic_release.branches.main]
 match = "main"
