@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 
 from pyPTE.core import pyPTE
@@ -10,6 +11,7 @@ from pyPTE.core.pyPTE import BinningRule, DelayRule
 if TYPE_CHECKING:
     # mne ships no type information, so this documents intent for readers and
     # editors; mypy sees Any
+    from mne import BaseEpochs
     from mne.io import BaseRaw
 
 
@@ -113,3 +115,62 @@ def PTE_from_mne(
     dPTE_df = pd.DataFrame(dPTE, index=channels, columns=channels)
     raw_PTE_df = pd.DataFrame(raw_PTE, index=channels, columns=channels)
     return dPTE_df, raw_PTE_df
+
+
+def PTE_from_epochs(
+    epochs: "BaseEpochs",
+    picks: str | Sequence[str | int] | slice | None = None,
+    *,
+    binning: BinningRule = "scott",
+    delay: DelayRule = "zero-crossing",
+    trim_cycles: float = 0.0,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """
+    Computes one dPTE and raw PTE matrix per epoch of an mne.Epochs object
+
+    The delay and the bins are estimated once, over all epochs together, and
+    shared by every epoch. A short epoch gives a noisy estimate of either on
+    its own, and matrices computed with different bin counts carry different
+    estimator bias, which a test across epochs would mistake for an effect.
+
+    Parameters
+    ----------
+    epochs : mne.Epochs
+        epoched EEG or MEG data in sensor space
+    picks : str | list | slice | None
+        channels to analyse, accepting anything mne.Epochs.pick() accepts; by
+        default every channel
+    binning, delay, trim_cycles
+        as for pyPTE.PTE, applied to every epoch with shared settings
+
+    Returns
+    -------
+    (dPTE, raw_PTE) : tuple of numpy.ndarray objects
+        n_epochs x m x m arrays, ready for pyPTE.group_test, group_contrast or
+        cluster_permutation. Channels follow ``epochs.ch_names`` after picks,
+        and entry ``[k, i, j]`` is the flow from channel i to channel j in
+        epoch k.
+
+    """
+    selection = epochs.copy().pick(picks) if picks is not None else epochs
+    data = selection.get_data()
+    n_epochs, m, n_times = data.shape
+
+    # the Hilbert transform treats rows independently, so stacking every epoch
+    # as extra channels gives the same phases while pooling the estimates of
+    # delay and bin size across all epochs
+    d_phase, analysis_delay, n_bins = pyPTE.prepare_phase(
+        data.reshape(n_epochs * m, n_times),
+        binning=binning,
+        delay=delay,
+        trim_cycles=trim_cycles,
+    )
+    d_phase = d_phase.reshape(n_epochs, m, -1)
+
+    dPTE = np.empty((n_epochs, m, m))
+    raw_PTE = np.empty((n_epochs, m, m))
+    for k in range(n_epochs):
+        dPTE[k], raw_PTE[k] = pyPTE.compute_dPTE_rawPTE(
+            d_phase[k], analysis_delay, n_bins=n_bins
+        )
+    return dPTE, raw_PTE

@@ -23,6 +23,11 @@ result.significant  # boolean mask, FDR corrected
 result.p_values
 ```
 
+Surrogates dominate the run time on large montages. `n_jobs=4` spreads them over
+four processes (`-1` uses every CPU) without changing the result, since the
+shifts are drawn from `seed` up front. In a script, keep the call under
+`if __name__ == "__main__":`, which worker processes need on macOS and Windows.
+
 ## Many short epochs, trials or subjects — usually better
 
 This is what M/EEG data normally looks like, and it is **far more sensitive**,
@@ -38,6 +43,16 @@ matrices = np.array([PTE(epoch)[0] for epoch in epochs])  # (n_epochs, m, m)
 
 group_test(matrices)  # is connectivity above chance?
 group_contrast(task, rest)  # does it differ between conditions?
+```
+
+With MNE, `PTE_from_epochs` does the loop and estimates the delay and bins once
+over all epochs, so every matrix is computed the same way:
+
+```python
+from pyPTE.adapters.mne_adapter import PTE_from_epochs
+
+dPTE, raw_PTE = PTE_from_epochs(epochs, picks="eeg")  # (n_epochs, m, m) each
+group_test(dPTE)
 ```
 
 A single epoch may be far too short for a reliable estimate on its own; what
