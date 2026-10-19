@@ -95,6 +95,20 @@ uv run pytest
 Before opening a PR: `uv run ruff check .`, `uv run ruff format .`,
 `uv run mypy pyPTE tests`.
 
+## Citing
+
+If pyPTE helps your research, please cite it. GitHub's "Cite this repository"
+button gives the details from [CITATION.cff](CITATION.cff). Please also cite the
+papers that introduced the method:
+
+- Lobier, Siebenhühner, Palva & Palva (2014). Phase transfer entropy: a novel
+  phase-based measure for directed connectivity in networks coupled by
+  oscillatory interactions. *NeuroImage* 85, 853–872.
+  [doi:10.1016/j.neuroimage.2013.08.056](https://doi.org/10.1016/j.neuroimage.2013.08.056)
+- Hillebrand et al. (2016). Direction of information flow in large-scale
+  resting-state networks is frequency-dependent. *PNAS* 113(14), 3867–3872.
+  [doi:10.1073/pnas.1515657113](https://doi.org/10.1073/pnas.1515657113)
+
 ## License
 
 `pyPTE` is released under GPL-3.0-or-later. See [LICENSE](LICENSE).

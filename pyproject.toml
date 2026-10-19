@@ -42,9 +42,10 @@ mne = ["mne>=1.6", "pandas>=2.0"]
 
 [project.urls]
 Homepage = "https://github.com/patrk/pyPTE"
+Documentation = "https://patrk.github.io/pyPTE"
 Repository = "https://github.com/patrk/pyPTE"
 Issues = "https://github.com/patrk/pyPTE/issues"
-Changelog = "https://github.com/patrk/pyPTE/blob/main/CHANGELOG.md"
+Changelog = "https://github.com/patrk/pyPTE/releases"
 
 [dependency-groups]
 # kept apart from dev so the minimum-versions CI job installs only what the
@@ -89,7 +90,7 @@ build-backend = "hatchling.build"
 packages = ["pyPTE"]
 
 [tool.hatch.build.targets.sdist]
-include = ["pyPTE", "tests", "README.md", "LICENSE", "CHANGELOG.md"]
+include = ["pyPTE", "tests", "README.md", "LICENSE", "CHANGELOG.md", "CITATION.cff"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

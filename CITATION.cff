@@ -1,0 +1,63 @@
+cff-version: 1.2.0
+message: >-
+  If you use pyPTE, please cite the software and the papers that introduced
+  the method.
+title: "pyPTE: Phase Transfer Entropy in Python"
+type: software
+authors:
+  - family-names: Mikulski
+    given-names: Patryk
+license: GPL-3.0-or-later
+repository-code: "https://github.com/patrk/pyPTE"
+url: "https://patrk.github.io/pyPTE"
+keywords:
+  - phase transfer entropy
+  - directed connectivity
+  - EEG
+  - MEG
+references:
+  - type: article
+    title: "Phase transfer entropy: a novel phase-based measure for directed connectivity in networks coupled by oscillatory interactions"
+    authors:
+      - family-names: Lobier
+        given-names: Muriel
+      - family-names: Siebenhühner
+        given-names: Felix
+      - family-names: Palva
+        given-names: Satu
+      - family-names: Palva
+        given-names: J. Matias
+    journal: NeuroImage
+    volume: 85
+    start: 853
+    end: 872
+    year: 2014
+    doi: 10.1016/j.neuroimage.2013.08.056
+  - type: article
+    title: "Direction of information flow in large-scale resting-state networks is frequency-dependent"
+    authors:
+      - family-names: Hillebrand
+        given-names: Arjan
+      - family-names: Tewarie
+        given-names: Prejaas
+      - family-names: van Dellen
+        given-names: Edwin
+      - family-names: Yu
+        given-names: Meichen
+      - family-names: Carbo
+        given-names: Ellen W. S.
+      - family-names: Douw
+        given-names: Linda
+      - family-names: Gouw
+        given-names: Alida A.
+      - family-names: van Straaten
+        given-names: Elisabeth C. W.
+      - family-names: Stam
+        given-names: Cornelis J.
+    journal: Proceedings of the National Academy of Sciences
+    volume: 113
+    issue: 14
+    start: 3867
+    end: 3872
+    year: 2016
+    doi: 10.1073/pnas.1515657113
