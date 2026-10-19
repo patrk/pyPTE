@@ -13,6 +13,7 @@ def _PTE_process(
     item: tuple[Any, npt.ArrayLike],
     binning: BinningRule = "scott",
     delay: DelayRule = "zero-crossing",
+    trim_cycles: float = 0.0,
 ) -> dict[Any, tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]:
     """
     Multi processing pool worker for PTE computation - wraps PTE method
@@ -21,7 +22,7 @@ def _PTE_process(
     ----------
     item : tuple
         tuple: key, (n_channels, n_samples) array
-    binning, delay
+    binning, delay, trim_cycles
         passed to pyPTE.PTE
 
     Returns
@@ -32,7 +33,9 @@ def _PTE_process(
     """
 
     key, value = item
-    return {key: pyPTE.PTE(value, binning=binning, delay=delay)}
+    return {
+        key: pyPTE.PTE(value, binning=binning, delay=delay, trim_cycles=trim_cycles)
+    }
 
 
 def multi_process(
@@ -40,6 +43,7 @@ def multi_process(
     *,
     binning: BinningRule = "scott",
     delay: DelayRule = "zero-crossing",
+    trim_cycles: float = 0.0,
     n_jobs: int | None = None,
 ) -> list[dict[Any, tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]]:
     """
@@ -49,7 +53,7 @@ def multi_process(
     ----------
     measurements : dict
         dict : key, (n_channels, n_samples) array
-    binning, delay
+    binning, delay, trim_cycles
         passed to pyPTE.PTE for every measurement
     n_jobs : int | None
         worker processes; every CPU by default, 1 runs in this process
@@ -60,7 +64,9 @@ def multi_process(
         one dict per measurement: key, (dPTE, rawPTE) tuple
 
     """
-    worker = partial(_PTE_process, binning=binning, delay=delay)
+    worker = partial(
+        _PTE_process, binning=binning, delay=delay, trim_cycles=trim_cycles
+    )
     items = list(measurements.items())
     if n_jobs == 1:
         return [worker(item) for item in items]

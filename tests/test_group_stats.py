@@ -68,7 +68,7 @@ def test_ttest_agrees_with_wilcoxon_on_a_clear_effect():
 def test_reference_can_be_moved_for_raw_pte():
     """Raw PTE is tested against 0, not 0.5."""
     raw = np.array([PTE(epoch(250, 0.9, s))[1] for s in range(20)])
-    result = group_test(raw, reference=0.0)
+    result = group_test(raw, reference=0.1)
 
     assert result.significant[0, 1]
     assert result.effect[0, 1] > 0
@@ -274,3 +274,69 @@ def test_cluster_permutation_stores_alpha_on_result():
     res = cluster_permutation(data, n_permutations=100, alpha=0.10, seed=0)
     assert res.alpha == 0.10
     assert res.n_significant_clusters == int((res.cluster_p <= 0.10).sum())
+
+
+# --------------------------------------------------------------------------
+# each pair once (#63, #64)
+# --------------------------------------------------------------------------
+
+
+def antisymmetric_samples(n_obs=12, m=4, seed=0):
+    """dPTE-shaped matrices: [j, i] == 1 - [i, j], zero diagonal."""
+    rng = np.random.default_rng(seed)
+    upper = rng.uniform(0.3, 0.8, (n_obs, m, m))
+    samples = np.triu(upper, 1) + np.tril(1.0 - upper.transpose(0, 2, 1), -1)
+    samples[:, np.arange(m), np.arange(m)] = 0.0
+    return samples
+
+
+@pytest.mark.parametrize("method", ["wilcoxon", "ttest"])
+def test_mirrored_pairs_match_testing_every_pair(method):
+    from scipy import stats
+
+    samples = antisymmetric_samples()
+    result = group_test(samples, method=method)
+    for i, j in zip(*np.nonzero(~np.eye(4, dtype=bool)), strict=True):
+        column = samples[:, i, j] - 0.5
+        if method == "wilcoxon":
+            expected = stats.wilcoxon(column)
+        else:
+            expected = stats.ttest_1samp(column, 0.0)
+        assert result.statistic[i, j] == pytest.approx(expected.statistic)
+        assert result.p_values[i, j] == pytest.approx(expected.pvalue)
+
+
+def test_raw_pte_pairs_are_tested_in_both_orientations():
+    rng = np.random.default_rng(1)
+    raw = rng.uniform(0.0, 0.2, (12, 3, 3))
+    raw[:, 0, 1] += 0.1  # 0 -> 1 only; raw PTE has no mirror relation
+    result = group_test(raw, reference=0.1)
+    assert result.p_values[0, 1] != result.p_values[1, 0]
+
+
+def test_clusters_hold_each_dpte_pair_once():
+    result = cluster_permutation(
+        chain_matrices(40, 250, 0.9), n_permutations=200, seed=0
+    )
+    assert result.clusters
+    covered = np.sum(result.clusters, axis=0)
+    # no pair appears twice, neither within nor across clusters, nor mirrored
+    assert covered.max() == 1
+    assert not np.any(covered.astype(bool) & covered.astype(bool).T)
+    # clusters are oriented along the flow, a -> b -> c -> d
+    assert all((result.statistic[mask] > 0).all() for mask in result.clusters)
+    assert np.array_equal(result.significant, result.significant.T)
+
+
+def test_small_samples_use_every_sign_flip_exactly():
+    data = chain_matrices(5, 250, 0.9)
+    first = cluster_permutation(data, threshold_p=0.05, n_permutations=1000, seed=0)
+    second = cluster_permutation(data, threshold_p=0.05, n_permutations=1000, seed=1)
+
+    assert first.clusters
+    assert first.n_permutations == 2**5
+    # the observed labelling is one of the 32, so p is a multiple of 1/32
+    np.testing.assert_allclose(first.cluster_p * 32, np.round(first.cluster_p * 32))
+    assert first.cluster_p.min() >= 1 / 32
+    # nothing random is left, so the seed cannot matter
+    np.testing.assert_array_equal(first.cluster_p, second.cluster_p)

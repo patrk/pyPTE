@@ -15,13 +15,19 @@ the individual channels.
 
 import warnings
 from dataclasses import dataclass
-from typing import Literal
+from itertools import product
+from typing import Literal, TypeVar
 
 import numpy as np
 import numpy.typing as npt
 from scipy import stats as _scipy_stats
 
-from pyPTE.core.pyPTE import PTE, BinningRule, DelayRule
+from pyPTE.core.pyPTE import (
+    BinningRule,
+    DelayRule,
+    compute_dPTE_rawPTE,
+    prepare_phase,
+)
 
 __all__ = [
     "ClusterResult",
@@ -88,12 +94,15 @@ class SignificanceResult:
         )
 
 
+_Scalar = TypeVar("_Scalar", bound=np.generic)
+
+
 def time_shifted_surrogate(
-    time_series: npt.NDArray[np.float64],
+    time_series: npt.NDArray[_Scalar],
     rng: np.random.Generator,
     *,
     min_fraction: float = 0.05,
-) -> npt.NDArray[np.float64]:
+) -> npt.NDArray[_Scalar]:
     """Circularly shift every channel by an independent random offset.
 
     Parameters
@@ -241,6 +250,7 @@ def surrogate_test(
     keep_null: bool = False,
     binning: BinningRule = "scott",
     delay: DelayRule = "zero-crossing",
+    trim_cycles: float = 0.0,
 ) -> SignificanceResult:
     """Test every directed channel pair against a time-shifted surrogate null.
 
@@ -265,8 +275,10 @@ def surrogate_test(
     keep_null : bool
         retain every surrogate matrix on the result. Needed to plot where an
         observation sits within its null; costs n_surrogates * m * m floats.
-    binning, delay
-        passed to `PTE` for the observed data and every surrogate
+    binning, delay, trim_cycles
+        as for `PTE`. The delay and bins are estimated once, from the observed
+        data, and every surrogate reuses them, so the null is computed with
+        exactly the settings of the value it is compared against.
 
     Returns
     -------
@@ -281,7 +293,10 @@ def surrogate_test(
     warn_if_underpowered(observed.shape[0], n_surrogates, alpha)
 
     rng = np.random.default_rng(seed)
-    dPTE, raw_PTE = PTE(observed, binning=binning, delay=delay)
+    d_phase, analysis_delay, n_bins = prepare_phase(
+        observed, binning=binning, delay=delay, trim_cycles=trim_cycles
+    )
+    dPTE, raw_PTE = compute_dPTE_rawPTE(d_phase, analysis_delay, n_bins=n_bins)
 
     # zero transfer in both directions, e.g. a duplicated or flat channel,
     # makes dPTE 0/0; NaN compares False with everything, which would count
@@ -305,8 +320,10 @@ def surrogate_test(
     )
 
     for index in range(n_surrogates):
-        surrogate_dPTE, _ = PTE(
-            time_shifted_surrogate(observed, rng), binning=binning, delay=delay
+        # shifting the binned phase rather than the raw signal keeps the seam
+        # out of the Hilbert transform, and saves one transform per surrogate
+        surrogate_dPTE, _ = compute_dPTE_rawPTE(
+            time_shifted_surrogate(d_phase, rng), analysis_delay, n_bins=n_bins
         )
         surrogate_effect = np.abs(surrogate_dPTE - 0.5)
         # an undefined surrogate is counted as extreme, the conservative side
@@ -383,17 +400,48 @@ class GroupResult:
         )
 
 
+def _is_antisymmetric(samples: npt.NDArray[np.float64]) -> bool:
+    """Whether ``samples[:, j, i] == -samples[:, i, j]`` off the diagonal.
+
+    True for centred dPTE and for differences of dPTE, where the two
+    orientations of a pair are one finding; false for raw PTE.
+    """
+    off_diagonal = ~np.eye(samples.shape[1], dtype=bool)
+    mirrored = -samples.transpose(0, 2, 1)
+    return bool(
+        np.allclose(
+            samples[:, off_diagonal],
+            mirrored[:, off_diagonal],
+            rtol=0.0,
+            atol=1e-9,
+            equal_nan=True,
+        )
+    )
+
+
 def _pairwise_test(
     samples: npt.NDArray[np.float64], method: str, alternative: str = "two-sided"
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-    """Apply a one-sample test independently to every ordered channel pair."""
+    """Apply a one-sample test to every channel pair.
+
+    Antisymmetric input is tested once per unordered pair and mirrored: the
+    lower entry is the same test on the negated column, which leaves a
+    two-sided p-value unchanged and flips the sign of a t-statistic.
+    """
     n_obs, m, _ = samples.shape
     statistic = np.zeros((m, m))
     p_values = np.ones((m, m))
+    mirror = alternative == "two-sided" and _is_antisymmetric(samples)
 
     for i in range(m):
         for j in range(m):
             if i == j:
+                continue
+            if mirror and j < i:
+                # Wilcoxon's two-sided statistic, min(W+, W-), is sign-blind
+                sign = -1.0 if method == "ttest" else 1.0
+                statistic[i, j] = sign * statistic[j, i]
+                p_values[i, j] = p_values[j, i]
                 continue
             column = samples[:, i, j]
             if np.allclose(column, column[0]):
@@ -452,8 +500,10 @@ def group_test(
     Notes
     -----
     dPTE is antisymmetric, so ``[i, j]`` and ``[j, i]`` express the same
-    finding twice. The correction below treats them as separate tests, which is
-    conservative rather than wrong.
+    finding. When the input is antisymmetric each pair is tested once and the
+    result mirrored. Benjamini-Hochberg over the mirrored p-values, each
+    present twice, reaches exactly the decisions it would over one per pair.
+    Raw PTE is not antisymmetric, so there both orientations are tested.
     """
     samples = np.asarray(matrices, dtype=float)
     if samples.ndim != 3 or samples.shape[1] != samples.shape[2]:
@@ -539,14 +589,17 @@ class ClusterResult:
         m x m t-statistic per ordered pair
     clusters : list of numpy.ndarray
         boolean m x m masks, one per connected component found above the
-        cluster-forming threshold, ordered from strongest to weakest
+        cluster-forming threshold, ordered from strongest to weakest. For dPTE
+        each pair appears once, at ``[i, j]`` where i drives j.
     cluster_p : numpy.ndarray
         p-value per cluster, against the null of the largest cluster mass
     significant : numpy.ndarray
-        m x m boolean mask: the union of the clusters that survived
+        m x m boolean mask: the union of the clusters that survived, marking
+        both orientations of each pair for dPTE
     threshold : float
         the cluster-forming t-threshold that was applied
     n_permutations : int
+        size of the null that was used, 2 ** n_observations when exact
     alpha : float
         the cluster-level significance threshold that was applied
     """
@@ -589,12 +642,16 @@ def _edgewise_t(samples: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
 
 
 def _find_clusters(
-    statistic: npt.NDArray[np.float64], threshold: float
+    statistic: npt.NDArray[np.float64],
+    threshold: float,
+    signs: tuple[float, ...] = (1.0, -1.0),
 ) -> tuple[list[npt.NDArray[np.bool_]], npt.NDArray[np.float64]]:
     """Connected components of the supra-threshold edges, and their masses.
 
     Positive and negative effects are clustered separately, so an increase and
     a decrease can never be joined into one component through a shared node.
+    For an antisymmetric statistic the negative clusters mirror the positive
+    ones exactly, so passing ``signs=(1.0,)`` finds each pair once.
     """
     from scipy.sparse import csr_matrix
     from scipy.sparse.csgraph import connected_components
@@ -605,7 +662,7 @@ def _find_clusters(
     clusters: list[npt.NDArray[np.bool_]] = []
     masses: list[float] = []
 
-    for sign in (1.0, -1.0):
+    for sign in signs:
         supra = (statistic * sign > threshold) & off_diagonal
         if not supra.any():
             continue
@@ -667,7 +724,8 @@ def cluster_permutation(
         is a free parameter of the method, not an inference: raising it favours
         few large clusters, lowering it favours many small ones.
     n_permutations : int
-        size of the permutation null
+        size of the permutation null. When 2 ** n_observations is no larger,
+        every sign pattern is used once instead, which makes the test exact.
     alpha : float
         cluster-level significance
     seed : int | None
@@ -696,8 +754,13 @@ def cluster_permutation(
 
     threshold = float(_scipy_stats.t.ppf(1.0 - threshold_p / 2.0, df=n_obs - 1))
 
+    # dPTE and its differences are antisymmetric: a cluster of i -> j effects
+    # has a mirror-image negative cluster, which is the same finding
+    antisymmetric = _is_antisymmetric(samples)
+    signs = (1.0,) if antisymmetric else (1.0, -1.0)
+
     observed = _edgewise_t(samples)
-    clusters, masses = _find_clusters(observed, threshold)
+    clusters, masses = _find_clusters(observed, threshold, signs)
 
     if not clusters:
         return ClusterResult(
@@ -712,16 +775,28 @@ def cluster_permutation(
 
     # sign flipping is the exchangeability the paired and one-sample designs
     # provide: under the null, the sign of each observation's effect is arbitrary
-    rng = np.random.default_rng(seed)
+    exact = 2**n_obs <= n_permutations
+    if exact:
+        # few enough observations to take every sign pattern once, the observed
+        # one included, which gives the exact permutation p-value
+        flip_sets = np.array(list(product((1.0, -1.0), repeat=n_obs)))
+        n_permutations = len(flip_sets)
+    else:
+        rng = np.random.default_rng(seed)
+        flip_sets = rng.choice([-1.0, 1.0], size=(n_permutations, n_obs))
+
     null_maxima = np.empty(n_permutations)
-    for index in range(n_permutations):
-        flips = rng.choice([-1.0, 1.0], size=(n_obs, 1, 1))
-        _, permuted_masses = _find_clusters(_edgewise_t(samples * flips), threshold)
+    for index, flips in enumerate(flip_sets):
+        permuted = _edgewise_t(samples * flips[:, np.newaxis, np.newaxis])
+        _, permuted_masses = _find_clusters(permuted, threshold, signs)
         null_maxima[index] = permuted_masses[0] if permuted_masses.size else 0.0
 
+    # a random null adds the observed labelling to both counts; the exact null
+    # already contains it
+    extra = 0.0 if exact else 1.0
     cluster_p = np.array(
         [
-            (1.0 + np.sum(null_maxima >= mass)) / (1.0 + n_permutations)
+            (extra + np.sum(null_maxima >= mass)) / (extra + n_permutations)
             for mass in masses
         ]
     )
@@ -730,6 +805,9 @@ def cluster_permutation(
     for mask, p in zip(clusters, cluster_p, strict=True):
         if p <= alpha:
             significant |= mask
+    if antisymmetric:
+        # both orientations of a pair, as surrogate_test and group_test report
+        significant |= significant.T
 
     return ClusterResult(
         statistic=observed,

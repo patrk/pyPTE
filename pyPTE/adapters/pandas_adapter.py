@@ -9,6 +9,7 @@ def PTE_from_dataframe(
     *,
     binning: BinningRule = "scott",
     delay: DelayRule = "zero-crossing",
+    trim_cycles: float = 0.0,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Computes dPTE and raw PTE matrices for the channels of a pandas.DataFrame
@@ -19,7 +20,7 @@ def PTE_from_dataframe(
         This object contains time-series data where pandas.DataFrame.index corresponds
         to the time samples and pandas.DataFrame.columns represents the
         individual channels
-    binning, delay
+    binning, delay, trim_cycles
         passed to pyPTE.PTE
 
     Returns
@@ -32,7 +33,9 @@ def PTE_from_dataframe(
     """
     # the frame is time-major, while the core expects (n_channels, n_samples)
     time_series = data_frame.to_numpy().T
-    dPTE, raw_PTE = pyPTE.PTE(time_series, binning=binning, delay=delay)
+    dPTE, raw_PTE = pyPTE.PTE(
+        time_series, binning=binning, delay=delay, trim_cycles=trim_cycles
+    )
 
     channels = data_frame.columns
     dPTE_df = pd.DataFrame(dPTE, index=channels, columns=channels)

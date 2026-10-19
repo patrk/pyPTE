@@ -308,3 +308,48 @@ def test_surrogate_test_forwards_binning_and_delay():
     result = surrogate_test(data, n_surrogates=5, seed=0, binning=6, delay=10)
     expected, _ = PTE(data, binning=6, delay=10)
     np.testing.assert_allclose(result.dPTE, expected)
+
+
+def test_surrogates_reuse_the_observed_delay_and_bins(monkeypatch):
+    # with the default rules the delay and bin count are estimated from data,
+    # so a surrogate re-estimating them would be tested under other settings
+    import pyPTE.core.pyPTE as core
+    import pyPTE.stats as stats
+
+    phases, settings = [], []
+    real_phase, real_counts = core.get_phase, core.compute_dPTE_rawPTE
+
+    def spy_phase(*args, **kwargs):
+        phases.append(1)
+        return real_phase(*args, **kwargs)
+
+    def spy_counts(d_phase, delay, n_bins=None, **kwargs):
+        settings.append((delay, n_bins))
+        return real_counts(d_phase, delay, n_bins=n_bins, **kwargs)
+
+    monkeypatch.setattr(core, "get_phase", spy_phase)
+    monkeypatch.setattr(stats, "compute_dPTE_rawPTE", spy_counts)
+
+    surrogate_test(coupled_pair(), n_surrogates=20, seed=0)
+
+    assert len(phases) == 1
+    assert len(settings) == 21 and len(set(settings)) == 1
+
+
+def test_surrogate_test_trims_like_pte():
+    from pyPTE import PTE
+
+    data = coupled_pair()
+    result = surrogate_test(data, n_surrogates=5, seed=0, trim_cycles=2)
+    expected, _ = PTE(data, trim_cycles=2)
+    np.testing.assert_array_equal(result.dPTE, expected)
+
+
+def test_independent_signals_give_roughly_uniform_p_values():
+    # the null must stay calibrated now that surrogates shift the binned phase
+    p = [
+        surrogate_test(independent_pair(seed=s), n_surrogates=99, seed=s).p_values[0, 1]
+        for s in range(60)
+    ]
+    assert 0.02 <= np.mean(np.asarray(p) <= 0.1) <= 0.25
+    assert 0.35 <= np.mean(p) <= 0.65

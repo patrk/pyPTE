@@ -322,3 +322,23 @@ def test_a_signal_without_rhythm_is_rejected_rather_than_guessed():
     flat = np.zeros((2, 500))
     with pytest.raises(ValueError, match="no detectable rhythm|does not advance"):
         get_delay(flat, "zero-crossing")
+
+
+def test_trimming_drops_whole_cycles_from_each_end():
+    data = coupled_pair(0)
+    phase = get_phase(data)
+    delay = get_delay(phase)
+    trim = 2 * delay  # one cycle
+    cropped = get_discretized_phase(phase[:, trim:-trim] + np.pi, 2 * np.pi / 8, 8)
+    expected = compute_PTE(cropped, delay, n_bins=8)
+    _, raw = PTE(data, binning=8, trim_cycles=1)
+    np.testing.assert_array_equal(raw, expected)
+
+
+def test_trimming_is_off_by_default_and_validated():
+    data = coupled_pair(0, n=2000)
+    np.testing.assert_array_equal(PTE(data)[1], PTE(data, trim_cycles=0)[1])
+    with pytest.raises(ValueError, match="at least 0"):
+        PTE(data, trim_cycles=-1)
+    with pytest.raises(ValueError, match="leaves too little"):
+        PTE(data, trim_cycles=100)

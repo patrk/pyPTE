@@ -405,6 +405,7 @@ def PTE(
     binning: BinningRule = "scott",
     delay: DelayRule = "zero-crossing",
     bias_correction: bool = False,
+    trim_cycles: float = 0.0,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """
     Computes dPTE and raw PTE for every ordered channel pair
@@ -412,7 +413,7 @@ def PTE(
     The procedure is:
 
     1. Compute the phase with a Hilbert transform, on the interval [-pi, pi[
-    2. Estimate the analysis delay
+    2. Estimate the analysis delay, and optionally trim the edges
     3. Shift the phase so there are no negative values, then bin it
     4. Count joint states and combine the entropies
 
@@ -441,6 +442,11 @@ def PTE(
         apply the Miller-Madow correction, which brings raw PTE on unrelated
         signals to about zero. Use it when the size of raw PTE in bits matters.
         It makes dPTE noisier, so leave it off when only direction matters.
+    trim_cycles : float
+        dominant cycles to drop from each end after the Hilbert transform,
+        where its phase is least reliable. One cycle is twice the estimated
+        delay. 0, the default, keeps every sample; 1 to 3 is typical for long
+        recordings, but short epochs may not have samples to spare.
 
     Returns
     -------
@@ -449,8 +455,57 @@ def PTE(
         describes information flow from channel i to channel j.
 
     """
+    d_phase, analysis_delay, n_bins = prepare_phase(
+        time_series, binning=binning, delay=delay, trim_cycles=trim_cycles
+    )
+    return compute_dPTE_rawPTE(
+        d_phase, analysis_delay, n_bins=n_bins, bias_correction=bias_correction
+    )
+
+
+def prepare_phase(
+    time_series: npt.ArrayLike,
+    *,
+    binning: BinningRule = "scott",
+    delay: DelayRule = "zero-crossing",
+    trim_cycles: float = 0.0,
+) -> tuple[npt.NDArray[np.int32], int, int]:
+    """
+    Turns raw signals into the binned phase that PTE counts
+
+    Steps 1 to 3 of PTE, exposed so that a caller can fix the delay and bins
+    once and reuse them, as surrogate_test does for every surrogate.
+
+    Parameters
+    ----------
+    time_series : numpy.ndarray
+        m x n ndarray : m: number of channels, n: number of samples
+    binning, delay, trim_cycles
+        as for PTE
+
+    Returns
+    -------
+    (d_phase, delay, n_bins) : tuple
+        m x n' array of phase bins in 0 .. n_bins - 1, where n' is n less any
+        trimmed samples; the analysis delay in samples; the number of bins
+
+    """
+    if trim_cycles < 0:
+        raise ValueError(f"trim_cycles must be at least 0, got {trim_cycles}")
+
     phase = get_phase(time_series)
     analysis_delay = get_delay(phase, delay)
+
+    if trim_cycles > 0:
+        # the delay estimates half the dominant period, so one cycle is twice it
+        trim = int(round(trim_cycles * 2 * analysis_delay))
+        if phase.shape[1] - 2 * trim <= analysis_delay:
+            raise ValueError(
+                f"trimming {trim_cycles} cycles ({trim} samples at each end) "
+                f"leaves too little of a {phase.shape[1]}-sample recording"
+            )
+        if trim > 0:
+            phase = phase[:, trim:-trim]
 
     phase_inc = phase + np.pi
     n_samples = phase_inc.shape[1]
@@ -473,6 +528,4 @@ def PTE(
         raise ValueError(f"unknown binning rule {binning!r}")
 
     d_phase = get_discretized_phase(phase_inc, binsize, n_bins=n_bins)
-    return compute_dPTE_rawPTE(
-        d_phase, analysis_delay, n_bins=n_bins, bias_correction=bias_correction
-    )
+    return d_phase, analysis_delay, n_bins
