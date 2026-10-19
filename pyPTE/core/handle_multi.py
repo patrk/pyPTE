@@ -2,6 +2,7 @@ from functools import partial
 from multiprocessing import Pool, cpu_count
 from typing import Any
 
+import numpy as np
 import numpy.typing as npt
 
 from pyPTE.core import pyPTE
@@ -12,7 +13,7 @@ def _PTE_process(
     item: tuple[Any, npt.ArrayLike],
     binning: BinningRule = "scott",
     delay: DelayRule = "zero-crossing",
-) -> dict[Any, tuple[npt.NDArray, npt.NDArray]]:
+) -> dict[Any, tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]:
     """
     Multi processing pool worker for PTE computation - wraps PTE method
 
@@ -40,7 +41,7 @@ def multi_process(
     binning: BinningRule = "scott",
     delay: DelayRule = "zero-crossing",
     n_jobs: int | None = None,
-) -> list[dict[Any, tuple[npt.NDArray, npt.NDArray]]]:
+) -> list[dict[Any, tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]]:
     """
     Computes PTE for several measurements in parallel
 

@@ -8,7 +8,7 @@ BinningRule = Literal["auto", "scott", "hillebrand"] | int
 DelayRule = Literal["zero-crossing", "phase-increment"] | int
 
 
-def get_delay(phase: npt.NDArray, rule: DelayRule = "zero-crossing") -> int:
+def get_delay(phase: npt.NDArray[np.float64], rule: DelayRule = "zero-crossing") -> int:
     """
     Estimates the analysis lag, in samples, from the rhythm of the signal
 
@@ -132,7 +132,7 @@ def get_bincount_auto(n_samples: int, samples_per_cell: float = 20.0) -> int:
     return max(int(np.floor((n_samples / samples_per_cell) ** (1 / 3) + 1e-9)), 3)
 
 
-def get_phase(time_series: npt.ArrayLike) -> npt.NDArray:
+def get_phase(time_series: npt.ArrayLike) -> npt.NDArray[np.float64]:
     """
     Computes phase from time series using a hilbert transform and computing the angles
     between the real and imaginary part for each sample
@@ -149,13 +149,13 @@ def get_phase(time_series: npt.ArrayLike) -> npt.NDArray:
     """
 
     complex_series = hilbert(time_series, axis=1)
-    phase = np.angle(complex_series)
+    phase: npt.NDArray[np.float64] = np.angle(complex_series)
     return phase
 
 
 def get_discretized_phase(
-    phase: npt.NDArray, binsize: float, n_bins: int | None = None
-) -> npt.NDArray:
+    phase: npt.NDArray[np.float64], binsize: float, n_bins: int | None = None
+) -> npt.NDArray[np.int32]:
     """
     Discretizes the phase series to rectangular bins
 
@@ -181,7 +181,7 @@ def get_discretized_phase(
     return d_phase
 
 
-def get_binsize(phase: npt.NDArray, c: float = 3.49) -> float:
+def get_binsize(phase: npt.NDArray[np.float64], c: float = 3.49) -> float:
     """
     Computes the bin size for the phase binning
 
@@ -199,7 +199,7 @@ def get_binsize(phase: npt.NDArray, c: float = 3.49) -> float:
 
     m, n = phase.shape
     binsize = c * np.mean(np.std(phase, axis=1, ddof=1)) * n ** (-1.0 / 3)
-    return binsize
+    return float(binsize)
 
 
 def get_bincount(binsize: float) -> int:
@@ -221,7 +221,7 @@ def get_bincount(binsize: float) -> int:
 
 
 def _entropy(
-    codes: npt.NDArray, n_samples: int, bias_correction: bool = False
+    codes: npt.NDArray[np.integer], n_samples: int, bias_correction: bool = False
 ) -> float:
     """
     Shannon entropy in bits of a discrete variable given its integer states
@@ -257,11 +257,11 @@ def _entropy(
 
 
 def compute_PTE(
-    phase: npt.NDArray,
+    phase: npt.NDArray[np.integer],
     delay: int,
     n_bins: int | None = None,
     bias_correction: bool = False,
-) -> npt.NDArray:
+) -> npt.NDArray[np.float64]:
     """
     For each channel pair (x, y) containing the individual discretized phase,
     which is obtained by pyPTE.pyPTE.get_discretized_phase,
@@ -295,10 +295,14 @@ def compute_PTE(
     ------
     ValueError
         if a phase code falls outside 0 .. n_bins - 1, where joint states
-        would collide silently
+        would collide silently, or if delay leaves no samples to count
     """
     m, n = phase.shape
     n_samples = n - delay
+    if n_samples < 1:
+        raise ValueError(
+            f"delay must be shorter than the recording, got {delay} for {n} samples"
+        )
     if n_bins is None:
         n_bins = int(phase.max()) + 1
     if phase.min() < 0 or phase.max() >= n_bins:
@@ -349,11 +353,11 @@ def compute_PTE(
 
 
 def compute_dPTE_rawPTE(
-    phase: npt.NDArray,
+    phase: npt.NDArray[np.integer],
     delay: int,
     n_bins: int | None = None,
     bias_correction: bool = False,
-) -> tuple[npt.NDArray, npt.NDArray]:
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """
     This function calls pyPTE.pyPTE.compute_PTE to obtain a PTE matrix and performs a
     normalization yielding dPTE to easily investigate directionality information.
@@ -401,7 +405,7 @@ def PTE(
     binning: BinningRule = "scott",
     delay: DelayRule = "zero-crossing",
     bias_correction: bool = False,
-) -> tuple[npt.NDArray, npt.NDArray]:
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """
     Computes dPTE and raw PTE for every ordered channel pair
 

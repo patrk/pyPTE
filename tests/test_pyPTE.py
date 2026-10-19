@@ -312,6 +312,10 @@ def test_unusable_parameters_are_rejected():
         PTE(data, delay=0)
     with pytest.raises(ValueError, match="unknown delay rule"):
         PTE(data, delay="autocorrelation")  # type: ignore[arg-type]
+    # a delay as long as the recording leaves no samples to count, which used
+    # to come back as an all-NaN result instead of an error
+    with pytest.raises(ValueError, match="shorter than the recording"):
+        PTE(data, delay=2000)
 
 
 def test_a_signal_without_rhythm_is_rejected_rather_than_guessed():

@@ -1,5 +1,5 @@
 ci:
-  skip: [pytest]
+  skip: [mypy, pytest]
 
 default_language_version:
   python: python3.11
@@ -23,15 +23,16 @@ repos:
         args: [--fix]
       - id: ruff-format
 
-  # mypy - lint-like type checking
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.18.2
-    hooks:
-      - id: mypy
-        additional_dependencies: [numpy, scipy]
-
   - repo: local
     hooks:
+      # mypy from the project environment, so it checks with the same version,
+      # config and installed packages as CI
+      - id: mypy
+        name: mypy
+        entry: uv run mypy pyPTE tests
+        language: system
+        types: [python]
+        pass_filenames: false
       - id: pytest
         name: pytest
         entry: uv run pytest
