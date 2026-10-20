@@ -55,6 +55,15 @@ class SignificanceResult:
         m x m observed dPTE matrix
     raw_PTE : numpy.ndarray
         m x m observed raw PTE matrix, in bits
+    effective_PTE : numpy.ndarray
+        m x m raw PTE minus the mean raw PTE of the surrogates, in bits: the
+        effective transfer entropy of Marschinski & Kantz (2002) computed on
+        phase, as in Yang et al. (2017) and Kudo et al. (2022), but against
+        time-shifted rather than shuffled surrogates. The surrogates carry
+        the estimator's bias but no coupling, so the difference is the
+        transfer beyond chance, comparable across recordings and bin counts
+        where raw PTE is not. Values below zero are kept, since clipping them
+        would bias any average taken across subjects. The diagonal is zero.
     p_values : numpy.ndarray
         m x m one-sided p-values against the surrogate null. The diagonal is
         set to 1.0, since self-transfer is identically zero.
@@ -67,6 +76,9 @@ class SignificanceResult:
         a bias that has nothing to do with coupling
     n_surrogates : int
         number of surrogates the null was built from
+    raw_null_mean : numpy.ndarray
+        m x m mean raw PTE of the surrogates, in bits: the bias floor that
+        effective_PTE subtracts
     null_distribution : numpy.ndarray | None
         n_surrogates x m x m array of surrogate dPTE values, present only when
         the test was run with ``keep_null=True``. Useful for plotting where an
@@ -76,11 +88,13 @@ class SignificanceResult:
 
     dPTE: npt.NDArray[np.float64]
     raw_PTE: npt.NDArray[np.float64]
+    effective_PTE: npt.NDArray[np.float64]
     p_values: npt.NDArray[np.float64]
     significant: npt.NDArray[np.bool_]
     threshold: float
     null_mean: npt.NDArray[np.float64]
     n_surrogates: int
+    raw_null_mean: npt.NDArray[np.float64]
     null_distribution: npt.NDArray[np.float64] | None = None
 
     @property
@@ -151,15 +165,16 @@ def _surrogate_block(
     delay: int,
     n_bins: int,
     shifts: npt.NDArray[np.int64],
-) -> npt.NDArray[np.float64]:
-    """dPTE for one surrogate per row of shifts; a worker task for n_jobs."""
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """dPTE and raw PTE for one surrogate per row of shifts; a worker task."""
     m = d_phase.shape[0]
-    block = np.empty((len(shifts), m, m))
+    dPTE = np.empty((len(shifts), m, m))
+    raw_PTE = np.empty((len(shifts), m, m))
     for row, channel_shifts in enumerate(shifts):
-        block[row], _ = compute_dPTE_rawPTE(
+        dPTE[row], raw_PTE[row] = compute_dPTE_rawPTE(
             _apply_shifts(d_phase, channel_shifts), delay, n_bins=n_bins
         )
-    return block
+    return dPTE, raw_PTE
 
 
 def _worker_count(n_jobs: int) -> int:
@@ -359,6 +374,7 @@ def surrogate_test(
     observed_effect = np.abs(dPTE - 0.5)
     at_least_as_extreme = np.zeros_like(dPTE, dtype=int)
     null_total = np.zeros_like(dPTE, dtype=float)
+    raw_null_total = np.zeros_like(raw_PTE, dtype=float)
     null_distribution = (
         np.empty((n_surrogates, *dPTE.shape), dtype=float) if keep_null else None
     )
@@ -369,7 +385,7 @@ def surrogate_test(
     m, n = d_phase.shape
     shifts = np.array([_draw_shifts(m, n, rng) for _ in range(n_surrogates)])
 
-    def blocks() -> Iterator[npt.NDArray[np.float64]]:
+    def blocks() -> Iterator[tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]:
         if workers == 1:
             for row in shifts:
                 yield _surrogate_block(d_phase, analysis_delay, n_bins, row[None])
@@ -385,8 +401,10 @@ def surrogate_test(
             )
 
     index = 0
-    for block in blocks():
-        for surrogate_dPTE in block:
+    for dPTE_block, raw_block in blocks():
+        # one surrogate at a time, so the sum does not depend on the chunking
+        for surrogate_dPTE, surrogate_raw in zip(dPTE_block, raw_block, strict=True):
+            raw_null_total += surrogate_raw
             surrogate_effect = np.abs(surrogate_dPTE - 0.5)
             # an undefined surrogate is counted as extreme, the conservative side
             at_least_as_extreme += (surrogate_effect >= observed_effect) | np.isnan(
@@ -407,14 +425,20 @@ def surrogate_test(
 
     significant, threshold = _correct_off_diagonal(p_values, alpha)
 
+    raw_null_mean = raw_null_total / n_surrogates
+    effective_PTE = raw_PTE - raw_null_mean
+    np.fill_diagonal(effective_PTE, 0.0)
+
     return SignificanceResult(
         dPTE=dPTE,
         raw_PTE=raw_PTE,
+        effective_PTE=effective_PTE,
         p_values=p_values,
         significant=significant,
         threshold=threshold,
         null_mean=null_total / n_surrogates,
         n_surrogates=n_surrogates,
+        raw_null_mean=raw_null_mean,
         null_distribution=null_distribution,
     )
 

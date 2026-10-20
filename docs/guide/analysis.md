@@ -28,6 +28,33 @@ four processes (`-1` uses every CPU) without changing the result, since the
 shifts are drawn from `seed` up front. In a script, keep the call under
 `if __name__ == "__main__":`, which worker processes need on macOS and Windows.
 
+### How much transfer, beyond chance
+
+Raw PTE is a histogram estimate, and it is biased upwards: two independent
+oscillators can score a quarter of a bit, and the floor moves with the bin
+count, the recording length and each channel's spectrum. Comparing raw PTE
+across recordings or settings partly compares that bias.
+
+`result.effective_PTE` subtracts it. It is raw PTE minus the mean raw PTE of the
+surrogates (`result.raw_null_mean`): the *effective transfer entropy* of
+[Marschinski & Kantz (2002)](https://doi.org/10.1140/epjb/e2002-00379-2) with
+phase as the variable, as in
+[Yang et al. (2017)](https://doi.org/10.1016/j.physa.2016.10.085) and
+[Kudo et al. (2022)](https://doi.org/10.1089/brain.2020.0989). The surrogates
+come for free, since the test builds them anyway. Unlike those papers, which
+shuffle the source, pyPTE shifts it in time, which keeps each channel's
+narrow-band autocorrelation, the thing the bias depends on; shuffled phase is
+white noise.
+
+```python
+result.effective_PTE  # bits beyond chance, near 0 without coupling
+```
+
+Negative values are kept rather than clipped: a pair with no coupling lands
+either side of zero, and clipping would push the average over subjects above
+it. Significance still comes from the dPTE test; effective PTE says how large an
+effect is, not whether it is real.
+
 ## Many short epochs, trials or subjects — usually better
 
 This is what M/EEG data normally looks like, and it is **far more sensitive**,
