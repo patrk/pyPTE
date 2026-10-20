@@ -361,8 +361,59 @@ def test_parallel_surrogates_match_serial_ones():
     parallel = surrogate_test(data, n_surrogates=19, seed=0, keep_null=True, n_jobs=2)
     np.testing.assert_array_equal(parallel.p_values, serial.p_values)
     np.testing.assert_array_equal(parallel.null_distribution, serial.null_distribution)
+    np.testing.assert_array_equal(parallel.effective_PTE, serial.effective_PTE)
 
 
 def test_n_jobs_must_be_positive_or_minus_one():
     with pytest.raises(ValueError, match="n_jobs"):
         surrogate_test(coupled_pair(), n_surrogates=5, n_jobs=0)
+
+
+# --------------------------------------------------------------------------
+# effective PTE
+# --------------------------------------------------------------------------
+
+
+def test_effective_pte_removes_the_bias_floor_of_independent_signals():
+    result = surrogate_test(independent_pair(), n_surrogates=50, seed=0)
+    off = ~np.eye(2, dtype=bool)
+    # the plug-in estimate sits well above zero with no coupling at all ...
+    assert np.all(result.raw_PTE[off] > 0.01)
+    # ... and almost all of that is the bias the surrogates also carry
+    assert np.all(np.abs(result.effective_PTE[off]) < 0.2 * result.raw_PTE[off])
+
+
+def test_effective_pte_keeps_genuine_transfer():
+    result = surrogate_test(coupled_pair(), n_surrogates=50, seed=0)
+    assert result.effective_PTE[0, 1] > 0.05
+    assert result.effective_PTE[0, 1] > 5 * abs(result.effective_PTE[1, 0])
+
+
+def test_effective_pte_is_raw_pte_minus_the_raw_null_mean():
+    result = surrogate_test(coupled_pair(), n_surrogates=20, seed=0)
+    expected = result.raw_PTE - result.raw_null_mean
+    np.fill_diagonal(expected, 0.0)
+    np.testing.assert_array_equal(result.effective_PTE, expected)
+    assert np.all(np.diag(result.effective_PTE) == 0)
+
+
+def test_effective_pte_is_not_clipped_at_zero():
+    # averaging over subjects needs the below-chance values, or the mean of
+    # pure noise would come out positive
+    result = surrogate_test(independent_pair(), n_surrogates=50, seed=0, binning=4)
+    off = ~np.eye(2, dtype=bool)
+    assert result.effective_PTE[off].min() < 0 < result.raw_PTE[off].min()
+
+
+def test_effective_pte_is_comparable_across_bin_counts():
+    data = independent_pair()
+    off = ~np.eye(2, dtype=bool)
+    raw, effective = [], []
+    for n_bins in (4, 8, 16):
+        result = surrogate_test(data, n_surrogates=50, seed=0, binning=n_bins)
+        raw.append(result.raw_PTE[off])
+        effective.append(result.effective_PTE[off])
+    # the bin count moves raw PTE by more than a tenth of a bit with no
+    # coupling present; the effective value barely moves
+    assert np.ptp(raw) > 0.1
+    assert np.ptp(effective) < 0.25 * np.ptp(raw)
