@@ -750,16 +750,19 @@ def group_test(
 ) -> GroupResult:
     """Test whether dPTE departs from chance consistently across observations.
 
-    This is the counterpart to `surrogate_test` for the way M/EEG data usually
-    arrives: many short epochs, trials or subjects rather than one long
-    recording. It is also far more powerful, because it asks whether an effect
-    is *consistent* rather than whether one recording's value is extreme.
-    Eighty epochs of a third of a second each can settle a question that a
-    minute of continuous data leaves marginal.
+    The counterpart to `surrogate_test` for repeated observations: epochs,
+    trials, segments or subjects. It asks whether an effect is consistent
+    across them.
 
-    A single epoch may be far too short for a reliable dPTE estimate on its
-    own; what matters is that the estimate is unbiased, so the noise averages
-    out over observations.
+    Consistency is also what an artefact produces. A difference in
+    signal-to-noise ratio, or one source mixed into two channels, shifts dPTE
+    the same way in every observation, so plain dPTE matrices test for those
+    as readily as for coupling. Pass time-reversal-differenced matrices
+    (``time_reversal=True`` in `PTE_segments` or ``PTE_from_epochs``), and
+    compute them with at least 16 bins, preferably 20: with fewer, a real
+    coupling's direction depends on the delay and can come out significantly
+    backwards. Short observations carry little directional information, so
+    the estimate in each one is pulled towards 0.5 rather than merely noisy.
 
     Parameters
     ----------

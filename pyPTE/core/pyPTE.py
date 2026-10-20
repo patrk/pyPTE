@@ -1,3 +1,4 @@
+import warnings
 from collections.abc import Sequence
 from typing import Literal
 
@@ -7,6 +8,12 @@ from scipy.signal import hilbert
 
 BinningRule = Literal["auto", "scott", "hillebrand"] | int
 DelayRule = Literal["zero-crossing", "phase-increment"] | int
+
+# Below this many bins the direction dPTE reports for a real coupling depends
+# on the delay: in simulation it flips sign from one delay to the next while
+# independent channels stay at 0.5 (#99). 16 is where it settled there; #85
+# measures it properly.
+MIN_RELIABLE_BINS = 16
 
 
 def get_delay(phase: npt.NDArray[np.float64], rule: DelayRule = "zero-crossing") -> int:
@@ -511,6 +518,11 @@ def PTE_segments(
 
     The phase is computed once over the whole recording, so the segments add
     no Hilbert edges, and every segment shares one delay and one bin count.
+    A data-dependent bin rule is sized for one segment, not for the whole
+    recording, which on short segments gives too few bins for a reliable
+    direction; ``binning=20`` is the safer choice. Segments of one recording
+    share its slow drift, so they are not fully independent and the group
+    test over them is somewhat optimistic.
 
     Parameters
     ----------
@@ -533,7 +545,11 @@ def PTE_segments(
     if n_segments < 2:
         raise ValueError(f"n_segments must be at least 2, got {n_segments}")
     d_phase, analysis_delay, n_bins = prepare_phase(
-        time_series, binning=binning, delay=delay, trim_cycles=trim_cycles
+        time_series,
+        binning=binning,
+        delay=delay,
+        trim_cycles=trim_cycles,
+        n_segments=n_segments,
     )
     if d_phase.shape[1] // n_segments <= analysis_delay:
         raise ValueError(
@@ -647,6 +663,7 @@ def prepare_phase(
     binning: BinningRule = "scott",
     delay: DelayRule = "zero-crossing",
     trim_cycles: float = 0.0,
+    n_segments: int = 1,
 ) -> tuple[npt.NDArray[np.int32], int, int]:
     """
     Turns raw signals into the binned phase that PTE counts
@@ -660,6 +677,12 @@ def prepare_phase(
         m x n ndarray : m: number of channels, n: number of samples
     binning, delay, trim_cycles
         as for PTE
+    n_segments : int
+        number of segments the binned phase will be split into, each analysed
+        on its own. The data-dependent bin rules then size the bins for one
+        segment rather than for the whole recording; bins sized for the whole
+        recording leave a short segment's joint histograms nearly empty, which
+        pulls its dPTE towards 0.5.
 
     Returns
     -------
@@ -686,7 +709,10 @@ def prepare_phase(
             phase = phase[:, trim:-trim]
 
     phase_inc = phase + np.pi
-    n_samples = phase_inc.shape[1]
+    if n_segments < 1:
+        raise ValueError(f"n_segments must be at least 1, got {n_segments}")
+    # what each analysed piece holds, which is what the bin rules should see
+    n_samples = phase_inc.shape[1] // n_segments
 
     if binning == "auto":
         n_bins = get_bincount_auto(n_samples - analysis_delay)
@@ -697,7 +723,8 @@ def prepare_phase(
         n_bins = int(binning)
         binsize = 2 * np.pi / n_bins
     elif binning == "scott":
-        binsize = get_binsize(phase_inc)
+        # Scott's width scales as n ** (-1/3)
+        binsize = get_binsize(phase_inc) * n_segments ** (1.0 / 3)
         n_bins = get_bincount(binsize)
     elif binning == "hillebrand":
         n_bins = get_bincount_hillebrand(n_samples, analysis_delay)
@@ -705,5 +732,24 @@ def prepare_phase(
     else:
         raise ValueError(f"unknown binning rule {binning!r}")
 
+    if n_bins < MIN_RELIABLE_BINS:
+        _warn_few_bins(n_bins, n_samples, binning)
+
     d_phase = get_discretized_phase(phase_inc, binsize, n_bins=n_bins)
     return d_phase, analysis_delay, n_bins
+
+
+def _warn_few_bins(n_bins: int, n_samples: int, binning: BinningRule) -> None:
+    advice = f"set binning to {MIN_RELIABLE_BINS} or more"
+    if binning == "scott":
+        # Scott's bin count grows as the cube root of the sample count
+        needed = int(np.ceil(n_samples * (MIN_RELIABLE_BINS / n_bins) ** 3))
+        advice = f"analyse windows of at least {needed} samples, or " + advice
+    warnings.warn(
+        f"{n_bins} phase bins: with fewer than {MIN_RELIABLE_BINS}, the "
+        "direction dPTE reports for a real coupling can depend on the delay, "
+        f"even flipping sign; significance against chance is unaffected. To "
+        f"rely on the direction, {advice}.",
+        RuntimeWarning,
+        stacklevel=3,
+    )

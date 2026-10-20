@@ -240,6 +240,9 @@ def test_no_warning_when_the_count_is_adequate():
     data = independent_pair(n=2000)
     with warnings.catch_warnings():
         warnings.simplefilter("error", RuntimeWarning)
+        # 2000 samples give too few bins for a reliable direction, which is
+        # a different warning from the one under test
+        warnings.filterwarnings("ignore", ".*phase bins", RuntimeWarning)
         surrogate_test(data, n_surrogates=200, seed=0)
 
 
@@ -449,9 +452,7 @@ def test_direction_set_by_snr_fails_time_reversal():
 
 
 def test_instantaneous_mixing_fails_time_reversal():
-    result = surrogate_test(
-        mixed_pair(n=8000), n_surrogates=99, seed=0, time_reversal=True
-    )
+    result = surrogate_test(mixed_pair(), n_surrogates=99, seed=0, time_reversal=True)
     assert result.reversal_confirmed is not None
     assert result.significant.any()
     assert not result.reversal_confirmed.any()
