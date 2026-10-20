@@ -19,7 +19,7 @@ from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from itertools import product, repeat
-from typing import Literal, TypeVar
+from typing import Literal, NamedTuple, TypeVar
 
 import numpy as np
 import numpy.typing as npt
@@ -84,6 +84,16 @@ class SignificanceResult:
         the test was run with ``keep_null=True``. Useful for plotting where an
         observation falls within its own null, at the cost of holding every
         surrogate matrix in memory.
+    reversed_dPTE : numpy.ndarray | None
+        m x m dPTE of the time-reversed recording, present only when the test
+        was run with ``time_reversal=True``
+    reversed_p_values : numpy.ndarray | None
+        m x m p-values of the time-reversed recording against its own
+        surrogates, built from the same shifts
+    reversal_confirmed : numpy.ndarray | None
+        m x m boolean mask of significant pairs whose direction flips,
+        significantly, when time is reversed. Like ``significant`` it is
+        symmetric: the mask marks a pair, and dPTE says which way it points.
     """
 
     dPTE: npt.NDArray[np.float64]
@@ -96,6 +106,9 @@ class SignificanceResult:
     n_surrogates: int
     raw_null_mean: npt.NDArray[np.float64]
     null_distribution: npt.NDArray[np.float64] | None = None
+    reversed_dPTE: npt.NDArray[np.float64] | None = None
+    reversed_p_values: npt.NDArray[np.float64] | None = None
+    reversal_confirmed: npt.NDArray[np.bool_] | None = None
 
     @property
     def n_significant(self) -> int:
@@ -104,9 +117,15 @@ class SignificanceResult:
     def summary(self) -> str:
         m = self.dPTE.shape[0]
         pairs = m * (m - 1)
+        reversal = (
+            ""
+            if self.reversal_confirmed is None
+            else f", {int(self.reversal_confirmed.sum())} of these confirmed by "
+            "time reversal"
+        )
         return (
             f"{self.n_significant} of {pairs} directed pairs significant "
-            f"at p <= {self.threshold:.4g} "
+            f"at p <= {self.threshold:.4g}{reversal} "
             f"({self.n_surrogates} surrogates, Benjamini-Hochberg corrected)"
         )
 
@@ -293,83 +312,28 @@ def _correct_off_diagonal(
     return significant, threshold
 
 
-def surrogate_test(
-    time_series: npt.ArrayLike,
-    *,
-    n_surrogates: int = 200,
-    alpha: float = 0.05,
-    seed: int | None = None,
-    progress: bool = False,
-    keep_null: bool = False,
-    binning: BinningRule = "scott",
-    delay: DelayRule = "zero-crossing",
-    trim_cycles: float = 0.0,
-    n_jobs: int = 1,
-) -> SignificanceResult:
-    """Test every directed channel pair against a time-shifted surrogate null.
+class _ShiftTest(NamedTuple):
+    dPTE: npt.NDArray[np.float64]
+    raw_PTE: npt.NDArray[np.float64]
+    p_values: npt.NDArray[np.float64]
+    null_mean: npt.NDArray[np.float64]
+    raw_null_mean: npt.NDArray[np.float64]
+    null_distribution: npt.NDArray[np.float64] | None
 
-    Significance is two-tailed in spirit but computed one-sided on the distance
-    from 0.5, because dPTE is antisymmetric: evidence that i drives j is the
-    same evidence that j does not drive i, and testing ``|dPTE - 0.5|`` keeps the
-    two directions from being counted as independent findings.
 
-    Parameters
-    ----------
-    time_series : numpy.ndarray
-        m x n array : m channels, n samples
-    n_surrogates : int
-        size of the null distribution. 200 supports p-values down to ~0.005;
-        raise it if you need finer resolution after correction.
-    alpha : float
-        target false discovery rate for the Benjamini-Hochberg step
-    seed : int | None
-        seed for surrogate generation, for reproducible results
-    progress : bool
-        print progress, since a large montage takes a while
-    keep_null : bool
-        retain every surrogate matrix on the result. Needed to plot where an
-        observation sits within its null; costs n_surrogates * m * m floats.
-    binning, delay, trim_cycles
-        as for `PTE`. The delay and bins are estimated once, from the observed
-        data, and every surrogate reuses them, so the null is computed with
-        exactly the settings of the value it is compared against.
-    n_jobs : int
-        worker processes for the surrogates; -1 uses every CPU. Results do not
-        depend on it: the shifts are drawn up front from ``seed``. Starting
-        workers costs about a second, so it pays off on large montages.
-
-    Returns
-    -------
-    result : SignificanceResult
-    """
-    observed = np.asarray(time_series, dtype=float)
-    if observed.ndim != 2:
-        raise ValueError(f"expected an m x n array, got shape {observed.shape}")
-    if n_surrogates < 1:
-        raise ValueError("n_surrogates must be at least 1")
-    workers = _worker_count(n_jobs)
-
-    warn_if_underpowered(observed.shape[0], n_surrogates, alpha)
-
-    rng = np.random.default_rng(seed)
-    d_phase, analysis_delay, n_bins = prepare_phase(
-        observed, binning=binning, delay=delay, trim_cycles=trim_cycles
-    )
+def _shift_test(
+    d_phase: npt.NDArray[np.int32],
+    analysis_delay: int,
+    n_bins: int,
+    shifts: npt.NDArray[np.int64],
+    workers: int,
+    keep_null: bool,
+    progress: bool,
+) -> _ShiftTest:
+    """Observed dPTE and its p-values against the surrogates given by shifts."""
+    n_surrogates = len(shifts)
     dPTE, raw_PTE = compute_dPTE_rawPTE(d_phase, analysis_delay, n_bins=n_bins)
-
-    # zero transfer in both directions, e.g. a duplicated or flat channel,
-    # makes dPTE 0/0; NaN compares False with everything, which would count
-    # no surrogate as extreme and hand the pair the smallest possible p-value
     undefined = np.isnan(dPTE)
-    np.fill_diagonal(undefined, False)
-    if undefined.any():
-        warnings.warn(
-            f"dPTE is undefined for {int(undefined.sum()) // 2} channel pair(s) "
-            "with no transfer in either direction, such as duplicated or flat "
-            "channels; they are reported with p = 1",
-            RuntimeWarning,
-            stacklevel=2,
-        )
 
     observed_effect = np.abs(dPTE - 0.5)
     at_least_as_extreme = np.zeros_like(dPTE, dtype=int)
@@ -378,12 +342,6 @@ def surrogate_test(
     null_distribution = (
         np.empty((n_surrogates, *dPTE.shape), dtype=float) if keep_null else None
     )
-
-    # shifting the binned phase rather than the raw signal keeps the seam out
-    # of the Hilbert transform. Drawing every shift here, in order, makes the
-    # null identical however many workers compute it.
-    m, n = d_phase.shape
-    shifts = np.array([_draw_shifts(m, n, rng) for _ in range(n_surrogates)])
 
     def blocks() -> Iterator[tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]:
         if workers == 1:
@@ -423,23 +381,151 @@ def surrogate_test(
     p_values[undefined] = 1.0
     np.fill_diagonal(p_values, 1.0)
 
-    significant, threshold = _correct_off_diagonal(p_values, alpha)
+    return _ShiftTest(
+        dPTE,
+        raw_PTE,
+        p_values,
+        null_total / n_surrogates,
+        raw_null_total / n_surrogates,
+        null_distribution,
+    )
 
-    raw_null_mean = raw_null_total / n_surrogates
-    effective_PTE = raw_PTE - raw_null_mean
+
+def surrogate_test(
+    time_series: npt.ArrayLike,
+    *,
+    n_surrogates: int = 200,
+    alpha: float = 0.05,
+    seed: int | None = None,
+    progress: bool = False,
+    keep_null: bool = False,
+    binning: BinningRule = "scott",
+    delay: DelayRule = "zero-crossing",
+    trim_cycles: float = 0.0,
+    n_jobs: int = 1,
+    time_reversal: bool = False,
+) -> SignificanceResult:
+    """Test every directed channel pair against a time-shifted surrogate null.
+
+    Significance is two-tailed in spirit but computed one-sided on the distance
+    from 0.5, because dPTE is antisymmetric: evidence that i drives j is the
+    same evidence that j does not drive i, and testing ``|dPTE - 0.5|`` keeps the
+    two directions from being counted as independent findings.
+
+    Parameters
+    ----------
+    time_series : numpy.ndarray
+        m x n array : m channels, n samples
+    n_surrogates : int
+        size of the null distribution. 200 supports p-values down to ~0.005;
+        raise it if you need finer resolution after correction.
+    alpha : float
+        target false discovery rate for the Benjamini-Hochberg step
+    seed : int | None
+        seed for surrogate generation, for reproducible results
+    progress : bool
+        print progress, since a large montage takes a while
+    keep_null : bool
+        retain every surrogate matrix on the result. Needed to plot where an
+        observation sits within its null; costs n_surrogates * m * m floats.
+    binning, delay, trim_cycles
+        as for `PTE`. The delay and bins are estimated once, from the observed
+        data, and every surrogate reuses them, so the null is computed with
+        exactly the settings of the value it is compared against.
+    n_jobs : int
+        worker processes for the surrogates; -1 uses every CPU. Results do not
+        depend on it: the shifts are drawn up front from ``seed``. Starting
+        workers costs about a second, so it pays off on large montages.
+    time_reversal : bool
+        also test the time-reversed recording and report which significant
+        pairs flip direction (Haufe et al. 2012, Winkler et al. 2016). A real
+        direction reverses with time; one produced by a difference in
+        signal-to-noise ratio or by instantaneous mixing does not. A pair is
+        confirmed only if it is significant both ways round, with opposite
+        signs. It doubles the run time, and it cannot catch a common driver
+        that reaches the two channels with different lags, since that order
+        is genuinely in the data.
+
+    Returns
+    -------
+    result : SignificanceResult
+    """
+    observed = np.asarray(time_series, dtype=float)
+    if observed.ndim != 2:
+        raise ValueError(f"expected an m x n array, got shape {observed.shape}")
+    if n_surrogates < 1:
+        raise ValueError("n_surrogates must be at least 1")
+    workers = _worker_count(n_jobs)
+
+    warn_if_underpowered(observed.shape[0], n_surrogates, alpha)
+
+    rng = np.random.default_rng(seed)
+    d_phase, analysis_delay, n_bins = prepare_phase(
+        observed, binning=binning, delay=delay, trim_cycles=trim_cycles
+    )
+    # shifting the binned phase rather than the raw signal keeps the seam out
+    # of the Hilbert transform. Drawing every shift here, in order, makes the
+    # null identical however many workers compute it.
+    m, n = d_phase.shape
+    shifts = np.array([_draw_shifts(m, n, rng) for _ in range(n_surrogates)])
+
+    forward = _shift_test(
+        d_phase, analysis_delay, n_bins, shifts, workers, keep_null, progress
+    )
+
+    # zero transfer in both directions, e.g. a duplicated or flat channel,
+    # makes dPTE 0/0; NaN compares False with everything, which would count
+    # no surrogate as extreme and hand the pair the smallest possible p-value,
+    # so _shift_test reports these pairs with p = 1
+    undefined = np.isnan(forward.dPTE)
+    np.fill_diagonal(undefined, False)
+    if undefined.any():
+        warnings.warn(
+            f"dPTE is undefined for {int(undefined.sum()) // 2} channel pair(s) "
+            "with no transfer in either direction, such as duplicated or flat "
+            "channels; they are reported with p = 1",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+
+    significant, threshold = _correct_off_diagonal(forward.p_values, alpha)
+
+    effective_PTE = forward.raw_PTE - forward.raw_null_mean
     np.fill_diagonal(effective_PTE, 0.0)
 
+    reversed_dPTE = reversed_p_values = reversal_confirmed = None
+    if time_reversal:
+        # the forward delay and bins, and the same shifts, so that the two
+        # directions of time differ in nothing but the order of the samples
+        reversed_phase, _, _ = prepare_phase(
+            observed[:, ::-1],
+            binning=n_bins,
+            delay=analysis_delay,
+            trim_cycles=trim_cycles,
+        )
+        backward = _shift_test(
+            reversed_phase, analysis_delay, n_bins, shifts, workers, False, progress
+        )
+        reversed_dPTE = backward.dPTE
+        reversed_p_values = backward.p_values
+        reversed_significant, _ = _correct_off_diagonal(reversed_p_values, alpha)
+        flips = np.sign(forward.dPTE - 0.5) == -np.sign(reversed_dPTE - 0.5)
+        reversal_confirmed = significant & reversed_significant & flips
+
     return SignificanceResult(
-        dPTE=dPTE,
-        raw_PTE=raw_PTE,
+        dPTE=forward.dPTE,
+        raw_PTE=forward.raw_PTE,
         effective_PTE=effective_PTE,
-        p_values=p_values,
+        p_values=forward.p_values,
         significant=significant,
         threshold=threshold,
-        null_mean=null_total / n_surrogates,
+        null_mean=forward.null_mean,
         n_surrogates=n_surrogates,
-        raw_null_mean=raw_null_mean,
-        null_distribution=null_distribution,
+        raw_null_mean=forward.raw_null_mean,
+        null_distribution=forward.null_distribution,
+        reversed_dPTE=reversed_dPTE,
+        reversed_p_values=reversed_p_values,
+        reversal_confirmed=reversal_confirmed,
     )
 
 

@@ -55,6 +55,38 @@ either side of zero, and clipping would push the average over subjects above
 it. Significance still comes from the dPTE test; effective PTE says how large an
 effect is, not whether it is real.
 
+### Does the direction survive time reversal?
+
+A significant pair can still point the wrong way. On broadband data, dPTE
+points from the cleaner channel to the noisier one: a noisy driver coupled to a
+clean target comes out as the target driving the driver, and with enough data
+the surrogate test calls that significant
+([#97](https://github.com/patrk/pyPTE/issues/97)). Instantaneous mixing of one
+source into two channels with different noise does the same.
+
+The check borrowed from Granger causality is to reverse time
+([Haufe et al. 2012](https://doi.org/10.1007/978-3-642-28551-6_4);
+[Winkler et al. 2016](https://doi.org/10.1109/tsp.2016.2531628)). A real
+direction reverses with the data; one made by noise or mixing stays where it
+was.
+
+```python
+result = surrogate_test(signal, n_surrogates=200, seed=0, time_reversal=True)
+result.reversal_confirmed  # significant, and significantly flipped when reversed
+result.reversed_dPTE
+```
+
+A pair is confirmed only when it is significant in both directions of time
+with opposite signs, which is the conservative rule. The reversed recording is
+tested against the same shifts, with the forward delay and bins, so the run
+takes twice as long. It cannot catch a common driver that reaches the two
+channels at different lags: that order really is in the data, so it reverses
+like a genuine interaction.
+
+Band-pass filtering to the oscillation of interest first is what makes the
+direction come out right in the first place. Time reversal tells you when it
+has not.
+
 ## Many short epochs, trials or subjects — usually better
 
 This is what M/EEG data normally looks like, and it is **far more sensitive**,
