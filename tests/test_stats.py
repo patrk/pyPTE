@@ -9,13 +9,13 @@ from pyPTE.stats import (
     surrogates_needed,
     time_shifted_surrogate,
 )
-
-FS = 250.0
-
-
-def oscillator(rng, n, freq=10.0):
-    drift = np.cumsum(rng.normal(0.0, 0.4 / np.sqrt(FS), n))
-    return np.sin(2 * np.pi * freq * np.arange(n) / FS + drift)
+from tests.signals import (
+    band_pass,
+    coupled,
+    mixed_pair,
+    noisy_driver_pair,
+    oscillator,
+)
 
 
 def independent_pair(n=6000, noise_ratio=1.0, seed=7):
@@ -26,11 +26,10 @@ def independent_pair(n=6000, noise_ratio=1.0, seed=7):
     return np.vstack([a, b])
 
 
-def coupled_pair(n=6000, seed=7):
-    rng = np.random.default_rng(seed)
-    driver = oscillator(rng, n) + 0.3 * rng.standard_normal(n)
-    target = 0.9 * np.roll(driver, 12) + 0.3 * rng.standard_normal(n)
-    return np.vstack([driver, target])
+def coupled_pair(n=30000, seed=7):
+    # band-passed, as real data should be: unfiltered, the direction would
+    # rest on which channel happens to be cleaner
+    return band_pass(coupled(np.random.default_rng(seed), n))
 
 
 # --------------------------------------------------------------------------
@@ -386,7 +385,8 @@ def test_effective_pte_removes_the_bias_floor_of_independent_signals():
 def test_effective_pte_keeps_genuine_transfer():
     result = surrogate_test(coupled_pair(), n_surrogates=50, seed=0)
     assert result.effective_PTE[0, 1] > 0.05
-    assert result.effective_PTE[0, 1] > 5 * abs(result.effective_PTE[1, 0])
+    # the reverse direction carries no transfer, so it sits near zero
+    assert abs(result.effective_PTE[1, 0]) < result.effective_PTE[0, 1] / 3
 
 
 def test_effective_pte_is_raw_pte_minus_the_raw_null_mean():
@@ -424,22 +424,6 @@ def test_effective_pte_is_comparable_across_bin_counts():
 # --------------------------------------------------------------------------
 
 
-def band_pass(data, low=8.0, high=12.0):
-    from scipy.signal import butter, sosfiltfilt
-
-    sos = butter(4, [low, high], btype="band", fs=FS, output="sos")
-    return sosfiltfilt(sos, data, axis=1)
-
-
-def noisy_driver_pair(n=30000, seed=0):
-    """A noisy channel driving a clean one, so SNR points the wrong way."""
-    rng = np.random.default_rng(seed)
-    clean = oscillator(rng, n)
-    driver = clean + 1.0 * rng.standard_normal(n)
-    target = 0.9 * np.roll(clean, 12) + 0.1 * rng.standard_normal(n)
-    return np.vstack([driver, target])
-
-
 def test_genuine_direction_survives_time_reversal():
     result = surrogate_test(
         band_pass(noisy_driver_pair()), n_surrogates=99, seed=0, time_reversal=True
@@ -465,27 +449,20 @@ def test_direction_set_by_snr_fails_time_reversal():
 
 
 def test_instantaneous_mixing_fails_time_reversal():
-    rng = np.random.default_rng(0)
-    source = oscillator(rng, 8000)
-    mixed = np.vstack(
-        [
-            source + 0.2 * rng.standard_normal(8000),
-            0.8 * source + 1.0 * rng.standard_normal(8000),
-        ]
+    result = surrogate_test(
+        mixed_pair(n=8000), n_surrogates=99, seed=0, time_reversal=True
     )
-    result = surrogate_test(mixed, n_surrogates=99, seed=0, time_reversal=True)
     assert result.reversal_confirmed is not None
     assert result.significant.any()
     assert not result.reversal_confirmed.any()
 
 
-def test_reversal_reuses_the_forward_delay_and_bins():
-    from pyPTE import PTE
-    from pyPTE.core.pyPTE import prepare_phase
+def test_reversal_reverses_the_forward_binned_phase():
+    from pyPTE.core.pyPTE import compute_dPTE_rawPTE, prepare_phase
 
     data = band_pass(noisy_driver_pair(n=3000))
-    _, delay, n_bins = prepare_phase(data, binning="scott", delay="zero-crossing")
-    expected, _ = PTE(data[:, ::-1], binning=n_bins, delay=delay)
+    d_phase, delay, n_bins = prepare_phase(data)
+    expected, _ = compute_dPTE_rawPTE(d_phase[:, ::-1].copy(), delay, n_bins=n_bins)
 
     result = surrogate_test(data, n_surrogates=19, seed=0, time_reversal=True)
     np.testing.assert_array_equal(result.reversed_dPTE, expected)

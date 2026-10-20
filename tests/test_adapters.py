@@ -6,19 +6,21 @@ pd = pytest.importorskip("pandas")
 
 from pyPTE.adapters.mne_adapter import PTE_from_mne, interpolate_mne  # noqa: E402
 from pyPTE.adapters.pandas_adapter import PTE_from_dataframe  # noqa: E402
+from tests.signals import band_pass, coupled  # noqa: E402
 
 FS = 250.0
 CHANNELS = ["driver", "target", "noise"]
 
 
 def coupled_signals(n=6000, lag=12, seed=0):
-    """Channel 0 drives channel 1; channel 2 is unrelated noise."""
+    """Channel 0 drives channel 1; channel 2 is unrelated noise.
+
+    Band-passed and with equal noise on the coupled pair, so the direction
+    comes from the lag rather than from which channel is cleaner.
+    """
     rng = np.random.default_rng(seed)
-    t = np.arange(n) / FS
-    driver = np.sin(2 * np.pi * 10 * t) + 0.2 * rng.standard_normal(n)
-    target = 0.9 * np.roll(driver, lag) + 0.4 * rng.standard_normal(n)
-    noise = rng.standard_normal(n)
-    return np.vstack([driver, target, noise])
+    pair = coupled(rng, n, lag=lag)
+    return band_pass(np.vstack([pair, rng.standard_normal(n)]))
 
 
 def make_raw(data, ch_names=CHANNELS, ch_type="eeg"):
@@ -65,7 +67,9 @@ def test_dataframe_adapter_is_orientation_sensitive():
     look like a channel, which has to change the result - otherwise the adapter
     is ignoring orientation, which is how it was broken before.
     """
-    data = coupled_signals(n=400)
+    # only the shapes matter, and three samples per "channel" are too few to
+    # band-pass
+    data = np.random.default_rng(0).standard_normal((3, 400))
     correct, _ = PTE_from_dataframe(pd.DataFrame(data.T, columns=CHANNELS))
     swapped, _ = PTE_from_dataframe(pd.DataFrame(data))
 
@@ -240,10 +244,22 @@ def test_multi_process_rejects_a_zero_worker_count():
 # --------------------------------------------------------------------------
 
 
-def make_epochs(n_epochs=30, n_times=250, seed=0):
+def make_epochs(n_epochs=20, n_times=4000, seed=0):
+    """Band-passed epochs with equal, realistic noise on the coupled pair.
+
+    With matched signal-to-noise ratios a short epoch carries little
+    directional information, so these are long: 16 s each.
+    """
     rng = np.random.default_rng(seed)
     epochs = [
-        coupled_signals(n=n_times, seed=int(rng.integers(1 << 31)))
+        band_pass(
+            np.vstack(
+                [
+                    coupled(rng, n_times, lag=5, driver_noise=1.0, target_noise=1.0),
+                    rng.standard_normal(n_times),
+                ]
+            )
+        )
         for _ in range(n_epochs)
     ]
     info = mne.create_info(CHANNELS, sfreq=FS, ch_types="eeg")
@@ -256,7 +272,7 @@ def test_epochs_give_one_matrix_per_epoch_ready_for_group_tests():
 
     dPTE, raw = PTE_from_epochs(make_epochs())
 
-    assert dPTE.shape == raw.shape == (30, 3, 3)
+    assert dPTE.shape == raw.shape == (20, 3, 3)
     result = group_test(dPTE)
     assert result.significant[0, 1] and result.effect[0, 1] > 0.5
 
@@ -280,3 +296,29 @@ def test_epochs_respect_picks_and_parameters():
     epochs = make_epochs(n_epochs=4)
     dPTE, _ = PTE_from_epochs(epochs, picks=["driver", "target"], binning=6, delay=10)
     assert dPTE.shape == (4, 2, 2)
+
+
+def test_epochs_can_be_time_reversal_differenced():
+    from pyPTE import group_test
+    from pyPTE.adapters.mne_adapter import PTE_from_epochs
+    from pyPTE.core.pyPTE import (
+        compute_dPTE_rawPTE,
+        prepare_phase,
+        reversal_differenced_dPTE,
+        reverse_phase,
+    )
+
+    epochs = make_epochs()
+    dPTE, raw = PTE_from_epochs(epochs, time_reversal=True)
+    plain, plain_raw = PTE_from_epochs(epochs)
+
+    np.testing.assert_array_equal(raw, plain_raw)
+    data = epochs.get_data()
+    stacked, delay, n_bins = prepare_phase(data.reshape(-1, data.shape[2]))
+    first = stacked[:3]
+    forward, _ = compute_dPTE_rawPTE(first, delay, n_bins=n_bins)
+    backward, _ = compute_dPTE_rawPTE(reverse_phase(first), delay, n_bins=n_bins)
+    np.testing.assert_allclose(dPTE[0], reversal_differenced_dPTE(forward, backward))
+
+    result = group_test(dPTE)
+    assert result.significant[0, 1] and result.effect[0, 1] > 0.5
