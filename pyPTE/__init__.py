@@ -1,4 +1,4 @@
-from pyPTE.core.pyPTE import PTE
+from pyPTE.core.pyPTE import PTE, PTE_segments
 from pyPTE.stats import (
     ClusterResult,
     GroupResult,
@@ -15,6 +15,7 @@ __version__ = "1.10.0"
 
 __all__ = [
     "PTE",
+    "PTE_segments",
     "ClusterResult",
     "GroupResult",
     "SignificanceResult",

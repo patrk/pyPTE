@@ -11,22 +11,21 @@ from pyPTE.core.pyPTE import (
     get_discretized_phase,
     get_phase,
 )
+from tests.signals import band_pass, coupled
 
 FS = 250.0
 
 
-def coupled_pair(seed=0, n=8000, lag=12, freq=10.0, flip=False):
+def coupled_pair(seed=0, n=8000, lag=12, flip=False):
     """Two channels where one drives the other by `lag` samples.
 
-    Returns an (m_channels, n_samples) array. With ``flip=False`` channel 0 is
-    the driver; with ``flip=True`` the channel order is reversed so the expected
-    direction inverts.
+    Returns an (m_channels, n_samples) array, band-passed around the rhythm and
+    with equal noise in both channels, so the direction comes from the lag
+    alone. With ``flip=False`` channel 0 is the driver; with ``flip=True`` the
+    channel order is reversed so the expected direction inverts.
     """
-    rng = np.random.default_rng(seed)
-    t = np.arange(n) / FS
-    driver = np.sin(2 * np.pi * freq * t) + 0.2 * rng.standard_normal(n)
-    target = 0.9 * np.roll(driver, lag) + 0.4 * rng.standard_normal(n)
-    return np.vstack([target, driver]) if flip else np.vstack([driver, target])
+    data = band_pass(coupled(np.random.default_rng(seed), n, lag=lag))
+    return data[::-1].copy() if flip else data
 
 
 def independent_pair(seed=0, n=8000):
@@ -267,13 +266,13 @@ def test_hillebrand_binning_uses_more_bins_than_scott():
 
 
 def test_binning_rules_agree_on_direction_but_not_magnitude():
-    """Both find the coupling; the finer histogram reports a smaller effect."""
+    """Both find the coupling, at different strengths."""
     data = coupled_pair(0)
     scott = PTE(data, binning="scott")[0][0, 1]
     hillebrand = PTE(data, binning="hillebrand")[0][0, 1]
 
     assert scott > 0.5 and hillebrand > 0.5
-    assert scott > hillebrand
+    assert abs(scott - hillebrand) > 0.005
 
 
 def test_explicit_bin_count_is_honoured():

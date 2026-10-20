@@ -30,6 +30,8 @@ from pyPTE.core.pyPTE import (
     DelayRule,
     compute_dPTE_rawPTE,
     prepare_phase,
+    reversal_differenced_dPTE,
+    reverse_phase,
 )
 
 __all__ = [
@@ -94,6 +96,14 @@ class SignificanceResult:
         m x m boolean mask of significant pairs whose direction flips,
         significantly, when time is reversed. Like ``significant`` it is
         symmetric: the mask marks a pair, and dPTE says which way it points.
+    differenced_dPTE : numpy.ndarray | None
+        m x m time-reversal-differenced dPTE (see
+        pyPTE.core.pyPTE.reversal_differenced_dPTE), in which directions that
+        come from a difference in signal-to-noise ratio or from instantaneous
+        mixing cancel. It is reported as an effect size only. The surrogate
+        null assumes independent channels, which mixing violates, so to test
+        it, compute it per segment or epoch (`PTE_segments`, or
+        ``PTE_from_epochs(time_reversal=True)``) and use `group_test`.
     """
 
     dPTE: npt.NDArray[np.float64]
@@ -109,6 +119,7 @@ class SignificanceResult:
     reversed_dPTE: npt.NDArray[np.float64] | None = None
     reversed_p_values: npt.NDArray[np.float64] | None = None
     reversal_confirmed: npt.NDArray[np.bool_] | None = None
+    differenced_dPTE: npt.NDArray[np.float64] | None = None
 
     @property
     def n_significant(self) -> int:
@@ -179,21 +190,35 @@ def _apply_shifts(
     return surrogate
 
 
+_Block = tuple[
+    npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64] | None
+]
+
+
 def _surrogate_block(
     d_phase: npt.NDArray[np.int32],
     delay: int,
     n_bins: int,
     shifts: npt.NDArray[np.int64],
-) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-    """dPTE and raw PTE for one surrogate per row of shifts; a worker task."""
+    reverse: bool = False,
+) -> _Block:
+    """dPTE and raw PTE for one surrogate per row of shifts; a worker task.
+
+    With reverse, also the dPTE of each surrogate with time reversed, which is
+    the matching surrogate of the reversed recording.
+    """
     m = d_phase.shape[0]
     dPTE = np.empty((len(shifts), m, m))
     raw_PTE = np.empty((len(shifts), m, m))
+    reversed_dPTE = np.empty((len(shifts), m, m)) if reverse else None
     for row, channel_shifts in enumerate(shifts):
-        dPTE[row], raw_PTE[row] = compute_dPTE_rawPTE(
-            _apply_shifts(d_phase, channel_shifts), delay, n_bins=n_bins
-        )
-    return dPTE, raw_PTE
+        surrogate = _apply_shifts(d_phase, channel_shifts)
+        dPTE[row], raw_PTE[row] = compute_dPTE_rawPTE(surrogate, delay, n_bins=n_bins)
+        if reversed_dPTE is not None:
+            reversed_dPTE[row], _ = compute_dPTE_rawPTE(
+                reverse_phase(surrogate), delay, n_bins=n_bins
+            )
+    return dPTE, raw_PTE, reversed_dPTE
 
 
 def _worker_count(n_jobs: int) -> int:
@@ -253,6 +278,38 @@ def warn_if_underpowered(
         f"nothing to survive. Use at least "
         f"{surrogates_needed(n_channels, alpha)} surrogates, or test at the "
         f"cluster level with cluster_permutation().",
+        RuntimeWarning,
+        stacklevel=3,
+    )
+
+
+def _warn_if_too_few_observations(
+    centred: npt.NDArray[np.float64], alpha: float
+) -> None:
+    """Warn when Wilcoxon over this many observations cannot reach significance.
+
+    The smallest two-sided p-value the exact test can return for n
+    observations is 2 / 2**n, when every observation has the same sign.
+    """
+    n_obs, m, _ = centred.shape
+    n_tests = m * (m - 1)
+    if _is_antisymmetric(centred):
+        # mirrored, so one test per unordered pair
+        n_tests //= 2
+    if n_tests < 1:
+        return
+    floor = 2.0 / 2.0**n_obs
+    strictest = alpha / n_tests
+    if floor <= strictest:
+        return
+    needed = int(np.ceil(np.log2(2.0 * n_tests / alpha)))
+    warnings.warn(
+        f"Wilcoxon over {n_obs} observations cannot produce a p-value below "
+        f"{floor:.3g}, but Benjamini-Hochberg over {n_tests} "
+        f"test{'s' if n_tests != 1 else ''} needs "
+        f"{strictest:.3g} to accept an isolated edge. Unless the effect is "
+        f"widespread, expect nothing to survive. Use at least {needed} epochs "
+        f"or segments, or test at the cluster level with cluster_permutation().",
         RuntimeWarning,
         stacklevel=3,
     )
@@ -319,6 +376,30 @@ class _ShiftTest(NamedTuple):
     null_mean: npt.NDArray[np.float64]
     raw_null_mean: npt.NDArray[np.float64]
     null_distribution: npt.NDArray[np.float64] | None
+    reversed_dPTE: npt.NDArray[np.float64] | None = None
+    reversed_p_values: npt.NDArray[np.float64] | None = None
+
+
+def _p_values(
+    extreme: npt.NDArray[np.int_],
+    n_surrogates: int,
+    undefined: npt.NDArray[np.bool_],
+) -> npt.NDArray[np.float64]:
+    # the +1 in both terms keeps p strictly positive: with a finite null we can
+    # never claim a p-value smaller than 1 / (n_surrogates + 1)
+    p_values = ((extreme + 1.0) / (n_surrogates + 1.0)).astype(np.float64)
+    p_values[undefined] = 1.0
+    np.fill_diagonal(p_values, 1.0)
+    return p_values
+
+
+def _count_extreme(
+    surrogate: npt.NDArray[np.float64], observed_effect: npt.NDArray[np.float64]
+) -> npt.NDArray[np.bool_]:
+    effect = np.abs(surrogate - 0.5)
+    # an undefined surrogate is counted as extreme, the conservative side
+    extreme: npt.NDArray[np.bool_] = (effect >= observed_effect) | np.isnan(effect)
+    return extreme
 
 
 def _shift_test(
@@ -329,11 +410,23 @@ def _shift_test(
     workers: int,
     keep_null: bool,
     progress: bool,
+    reverse: bool = False,
 ) -> _ShiftTest:
-    """Observed dPTE and its p-values against the surrogates given by shifts."""
+    """Observed dPTE and its p-values against the surrogates given by shifts.
+
+    With reverse, also the dPTE of the time-reversed recording, tested
+    against the reverse of the same surrogates.
+    """
     n_surrogates = len(shifts)
     dPTE, raw_PTE = compute_dPTE_rawPTE(d_phase, analysis_delay, n_bins=n_bins)
     undefined = np.isnan(dPTE)
+
+    reversed_dPTE = None
+    if reverse:
+        reversed_dPTE, _ = compute_dPTE_rawPTE(
+            reverse_phase(d_phase), analysis_delay, n_bins=n_bins
+        )
+        reversed_extreme = np.zeros_like(dPTE, dtype=int)
 
     observed_effect = np.abs(dPTE - 0.5)
     at_least_as_extreme = np.zeros_like(dPTE, dtype=int)
@@ -343,10 +436,12 @@ def _shift_test(
         np.empty((n_surrogates, *dPTE.shape), dtype=float) if keep_null else None
     )
 
-    def blocks() -> Iterator[tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]]:
+    def blocks() -> Iterator[_Block]:
         if workers == 1:
             for row in shifts:
-                yield _surrogate_block(d_phase, analysis_delay, n_bins, row[None])
+                yield _surrogate_block(
+                    d_phase, analysis_delay, n_bins, row[None], reverse
+                )
             return
         chunks = np.array_split(shifts, min(4 * workers, n_surrogates))
         with ProcessPoolExecutor(max_workers=workers) as pool:
@@ -356,18 +451,22 @@ def _shift_test(
                 repeat(analysis_delay),
                 repeat(n_bins),
                 chunks,
+                repeat(reverse),
             )
 
     index = 0
-    for dPTE_block, raw_block in blocks():
+    for dPTE_block, raw_block, reversed_block in blocks():
         # one surrogate at a time, so the sum does not depend on the chunking
-        for surrogate_dPTE, surrogate_raw in zip(dPTE_block, raw_block, strict=True):
+        for row, (surrogate_dPTE, surrogate_raw) in enumerate(
+            zip(dPTE_block, raw_block, strict=True)
+        ):
             raw_null_total += surrogate_raw
-            surrogate_effect = np.abs(surrogate_dPTE - 0.5)
-            # an undefined surrogate is counted as extreme, the conservative side
-            at_least_as_extreme += (surrogate_effect >= observed_effect) | np.isnan(
-                surrogate_effect
-            )
+            at_least_as_extreme += _count_extreme(surrogate_dPTE, observed_effect)
+            if reversed_block is not None:
+                assert reversed_dPTE is not None
+                reversed_extreme += _count_extreme(
+                    reversed_block[row], np.abs(reversed_dPTE - 0.5)
+                )
             null_total += surrogate_dPTE
             if null_distribution is not None:
                 null_distribution[index] = surrogate_dPTE
@@ -375,19 +474,21 @@ def _shift_test(
             if progress and index % 25 == 0:
                 print(f"  surrogate {index}/{n_surrogates}")
 
-    # the +1 in both terms keeps p strictly positive: with a finite null we can
-    # never claim a p-value smaller than 1 / (n_surrogates + 1)
-    p_values = (at_least_as_extreme + 1.0) / (n_surrogates + 1.0)
-    p_values[undefined] = 1.0
-    np.fill_diagonal(p_values, 1.0)
+    reversed_p = None
+    if reversed_dPTE is not None:
+        reversed_p = _p_values(
+            reversed_extreme, n_surrogates, undefined | np.isnan(reversed_dPTE)
+        )
 
     return _ShiftTest(
         dPTE,
         raw_PTE,
-        p_values,
+        _p_values(at_least_as_extreme, n_surrogates, undefined),
         null_total / n_surrogates,
         raw_null_total / n_surrogates,
         null_distribution,
+        reversed_dPTE,
+        reversed_p,
     )
 
 
@@ -411,6 +512,13 @@ def surrogate_test(
     from 0.5, because dPTE is antisymmetric: evidence that i drives j is the
     same evidence that j does not drive i, and testing ``|dPTE - 0.5|`` keeps the
     two directions from being counted as independent findings.
+
+    The null rules out independent channels, not a wrong direction: a
+    difference in signal-to-noise ratio between coupled channels, or one
+    source mixed into both, gives a significant direction that may point
+    either way. Band-pass narrowly first, and check direction with
+    ``time_reversal=True`` or, with more power, with `PTE_segments` and
+    `group_test`.
 
     Parameters
     ----------
@@ -437,14 +545,15 @@ def surrogate_test(
         depend on it: the shifts are drawn up front from ``seed``. Starting
         workers costs about a second, so it pays off on large montages.
     time_reversal : bool
-        also test the time-reversed recording and report which significant
-        pairs flip direction (Haufe et al. 2012, Winkler et al. 2016). A real
-        direction reverses with time; one produced by a difference in
-        signal-to-noise ratio or by instantaneous mixing does not. A pair is
-        confirmed only if it is significant both ways round, with opposite
-        signs. It doubles the run time, and it cannot catch a common driver
-        that reaches the two channels with different lags, since that order
-        is genuinely in the data.
+        also test the time-reversed recording (Haufe et al. 2012, Winkler et
+        al. 2016). A real direction reverses with time; one produced by a
+        difference in signal-to-noise ratio or by instantaneous mixing does
+        not. ``reversal_confirmed`` marks pairs that are significant both ways
+        round, with opposite signs, which is the conservative rule; the
+        reversed recording is tested against the reverse of each surrogate.
+        ``differenced_dPTE`` comes back too, as an effect size. It doubles the
+        run time, and it cannot catch a common driver that reaches the two
+        channels at different lags, since that order is genuinely in the data.
 
     Returns
     -------
@@ -470,7 +579,14 @@ def surrogate_test(
     shifts = np.array([_draw_shifts(m, n, rng) for _ in range(n_surrogates)])
 
     forward = _shift_test(
-        d_phase, analysis_delay, n_bins, shifts, workers, keep_null, progress
+        d_phase,
+        analysis_delay,
+        n_bins,
+        shifts,
+        workers,
+        keep_null,
+        progress,
+        reverse=time_reversal,
     )
 
     # zero transfer in both directions, e.g. a duplicated or flat channel,
@@ -493,24 +609,16 @@ def surrogate_test(
     effective_PTE = forward.raw_PTE - forward.raw_null_mean
     np.fill_diagonal(effective_PTE, 0.0)
 
-    reversed_dPTE = reversed_p_values = reversal_confirmed = None
-    if time_reversal:
-        # the forward delay and bins, and the same shifts, so that the two
-        # directions of time differ in nothing but the order of the samples
-        reversed_phase, _, _ = prepare_phase(
-            observed[:, ::-1],
-            binning=n_bins,
-            delay=analysis_delay,
-            trim_cycles=trim_cycles,
+    reversal_confirmed = differenced_dPTE = None
+    if forward.reversed_p_values is not None and forward.reversed_dPTE is not None:
+        reversed_significant, _ = _correct_off_diagonal(
+            forward.reversed_p_values, alpha
         )
-        backward = _shift_test(
-            reversed_phase, analysis_delay, n_bins, shifts, workers, False, progress
-        )
-        reversed_dPTE = backward.dPTE
-        reversed_p_values = backward.p_values
-        reversed_significant, _ = _correct_off_diagonal(reversed_p_values, alpha)
-        flips = np.sign(forward.dPTE - 0.5) == -np.sign(reversed_dPTE - 0.5)
+        flips = np.sign(forward.dPTE - 0.5) == -np.sign(forward.reversed_dPTE - 0.5)
         reversal_confirmed = significant & reversed_significant & flips
+        differenced_dPTE = reversal_differenced_dPTE(
+            forward.dPTE, forward.reversed_dPTE
+        )
 
     return SignificanceResult(
         dPTE=forward.dPTE,
@@ -523,9 +631,10 @@ def surrogate_test(
         n_surrogates=n_surrogates,
         raw_null_mean=forward.raw_null_mean,
         null_distribution=forward.null_distribution,
-        reversed_dPTE=reversed_dPTE,
-        reversed_p_values=reversed_p_values,
+        reversed_dPTE=forward.reversed_dPTE,
+        reversed_p_values=forward.reversed_p_values,
         reversal_confirmed=reversal_confirmed,
+        differenced_dPTE=differenced_dPTE,
     )
 
 
@@ -685,6 +794,8 @@ def group_test(
         raise ValueError("a group test needs at least 2 observations")
 
     centred = samples - reference
+    if method == "wilcoxon":
+        _warn_if_too_few_observations(centred, alpha)
     statistic, p_values = _pairwise_test(centred, method)
     significant, threshold = _correct_off_diagonal(p_values, alpha)
 

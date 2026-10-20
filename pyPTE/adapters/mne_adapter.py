@@ -124,6 +124,7 @@ def PTE_from_epochs(
     binning: BinningRule = "scott",
     delay: DelayRule = "zero-crossing",
     trim_cycles: float = 0.0,
+    time_reversal: bool = False,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """
     Computes one dPTE and raw PTE matrix per epoch of an mne.Epochs object
@@ -142,6 +143,11 @@ def PTE_from_epochs(
         default every channel
     binning, delay, trim_cycles
         as for pyPTE.PTE, applied to every epoch with shared settings
+    time_reversal : bool
+        return the time-reversal-differenced dPTE of each epoch, as for
+        pyPTE.PTE. Passed to group_test, this is the robust test of direction:
+        directions produced by signal-to-noise differences or instantaneous
+        mixing cancel in every epoch.
 
     Returns
     -------
@@ -165,12 +171,9 @@ def PTE_from_epochs(
         delay=delay,
         trim_cycles=trim_cycles,
     )
-    d_phase = d_phase.reshape(n_epochs, m, -1)
-
-    dPTE = np.empty((n_epochs, m, m))
-    raw_PTE = np.empty((n_epochs, m, m))
-    for k in range(n_epochs):
-        dPTE[k], raw_PTE[k] = pyPTE.compute_dPTE_rawPTE(
-            d_phase[k], analysis_delay, n_bins=n_bins
-        )
-    return dPTE, raw_PTE
+    return pyPTE.compute_segments(
+        list(d_phase.reshape(n_epochs, m, -1)),
+        analysis_delay,
+        n_bins,
+        time_reversal=time_reversal,
+    )

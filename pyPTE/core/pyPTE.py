@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Literal
 
 import numpy as np
@@ -406,6 +407,7 @@ def PTE(
     delay: DelayRule = "zero-crossing",
     bias_correction: bool = False,
     trim_cycles: float = 0.0,
+    time_reversal: bool = False,
 ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
     """
     Computes dPTE and raw PTE for every ordered channel pair
@@ -416,6 +418,12 @@ def PTE(
     2. Estimate the analysis delay, and optionally trim the edges
     3. Shift the phase so there are no negative values, then bin it
     4. Count joint states and combine the entropies
+
+    Band-pass the input narrowly to the rhythm of interest first. On broadband
+    data dPTE points from the cleaner channel to the noisier one, whatever the
+    coupling, and even after filtering a large enough difference in
+    signal-to-noise ratio can reverse it. ``time_reversal=True`` cancels that
+    artefact; see the analysis guide.
 
     Both free choices in that procedure are exposed, because neither is
     obviously correct and they change the answer. Wider bins give a
@@ -435,7 +443,9 @@ def PTE(
         get_bincount_auto), which keeps raw PTE close to unbiased but blurs
         phase and usually weakens dPTE. Use it when raw PTE in bits matters.
         "hillebrand" uses the bin count published in Hillebrand et al. 2016,
-        which is finer still. An integer sets the number of bins directly.
+        which is finer still and, in simulation, more easily turned around by
+        a difference in signal-to-noise ratio. An integer sets the number of
+        bins directly.
     delay : {"zero-crossing", "phase-increment"} or int
         passed to pyPTE.core.pyPTE.get_delay; an integer is used as-is
     bias_correction : bool
@@ -447,6 +457,12 @@ def PTE(
         where its phase is least reliable. One cycle is twice the estimated
         delay. 0, the default, keeps every sample; 1 to 3 is typical for long
         recordings, but short epochs may not have samples to spare.
+    time_reversal : bool
+        return the time-reversal-differenced dPTE instead of dPTE (see
+        reversal_differenced_dPTE). It cancels directions that come from a
+        difference in signal-to-noise ratio or from instantaneous mixing,
+        which plain dPTE reports as real, at twice the cost. raw_PTE is still
+        the forward raw PTE.
 
     Returns
     -------
@@ -458,9 +474,171 @@ def PTE(
     d_phase, analysis_delay, n_bins = prepare_phase(
         time_series, binning=binning, delay=delay, trim_cycles=trim_cycles
     )
-    return compute_dPTE_rawPTE(
+    dPTE, raw_PTE = compute_dPTE_rawPTE(
         d_phase, analysis_delay, n_bins=n_bins, bias_correction=bias_correction
     )
+    if time_reversal:
+        reversed_dPTE, _ = compute_dPTE_rawPTE(
+            reverse_phase(d_phase),
+            analysis_delay,
+            n_bins=n_bins,
+            bias_correction=bias_correction,
+        )
+        dPTE = reversal_differenced_dPTE(dPTE, reversed_dPTE)
+    return dPTE, raw_PTE
+
+
+def PTE_segments(
+    time_series: npt.ArrayLike,
+    n_segments: int,
+    *,
+    binning: BinningRule = "scott",
+    delay: DelayRule = "zero-crossing",
+    bias_correction: bool = False,
+    trim_cycles: float = 0.0,
+    time_reversal: bool = False,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """
+    Computes one dPTE and raw PTE matrix per segment of a continuous recording
+
+    The way to put a group test on one long recording: the matrices go to
+    pyPTE.group_test, which asks whether a direction is consistent across
+    segments. With ``time_reversal=True`` that is the robust test of
+    direction, since directions produced by a difference in signal-to-noise
+    ratio or by instantaneous mixing cancel in every segment. The surrogate
+    test cannot do this for the differenced statistic, because its null
+    assumes independent channels.
+
+    The phase is computed once over the whole recording, so the segments add
+    no Hilbert edges, and every segment shares one delay and one bin count.
+
+    Parameters
+    ----------
+    time_series : numpy.ndarray
+        m x n array : m channels, n samples
+    n_segments : int
+        number of contiguous, near-equal segments. With Wilcoxon's test the
+        smallest two-sided p-value over n segments is 2 / 2**n, so the count
+        bounds what can survive correction; group_test warns when it is too
+        small. Each segment should still span many cycles of the rhythm.
+    binning, delay, bias_correction, trim_cycles, time_reversal
+        as for `PTE`
+
+    Returns
+    -------
+    (dPTE, raw_PTE) : tuple of numpy.ndarray objects
+        n_segments x m x m arrays, ready for pyPTE.group_test. raw_PTE is the
+        forward raw PTE even with time_reversal.
+    """
+    if n_segments < 2:
+        raise ValueError(f"n_segments must be at least 2, got {n_segments}")
+    d_phase, analysis_delay, n_bins = prepare_phase(
+        time_series, binning=binning, delay=delay, trim_cycles=trim_cycles
+    )
+    if d_phase.shape[1] // n_segments <= analysis_delay:
+        raise ValueError(
+            f"{n_segments} segments of {d_phase.shape[1] // n_segments} samples "
+            f"are too short for the delay of {analysis_delay} samples"
+        )
+    return compute_segments(
+        np.array_split(d_phase, n_segments, axis=1),
+        analysis_delay,
+        n_bins,
+        bias_correction=bias_correction,
+        time_reversal=time_reversal,
+    )
+
+
+def compute_segments(
+    segments: Sequence[npt.NDArray[np.int32]],
+    delay: int,
+    n_bins: int,
+    *,
+    bias_correction: bool = False,
+    time_reversal: bool = False,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """
+    dPTE and raw PTE for each of several binned phase arrays
+
+    Parameters
+    ----------
+    segments : sequence of numpy.ndarray
+        m x n_k binned phase arrays, as from `prepare_phase`, sharing delay and
+        bins; lengths may differ
+    delay, n_bins
+        the shared delay and bin count
+    bias_correction, time_reversal
+        as for `PTE`
+
+    Returns
+    -------
+    (dPTE, raw_PTE) : tuple of numpy.ndarray objects
+        len(segments) x m x m arrays
+    """
+    m = segments[0].shape[0]
+    dPTE = np.empty((len(segments), m, m))
+    raw_PTE = np.empty((len(segments), m, m))
+    for k, segment in enumerate(segments):
+        segment = np.ascontiguousarray(segment)
+        dPTE[k], raw_PTE[k] = compute_dPTE_rawPTE(
+            segment, delay, n_bins=n_bins, bias_correction=bias_correction
+        )
+        if time_reversal:
+            reversed_dPTE, _ = compute_dPTE_rawPTE(
+                reverse_phase(segment),
+                delay,
+                n_bins=n_bins,
+                bias_correction=bias_correction,
+            )
+            dPTE[k] = reversal_differenced_dPTE(dPTE[k], reversed_dPTE)
+    return dPTE, raw_PTE
+
+
+def reverse_phase(d_phase: npt.NDArray[np.int32]) -> npt.NDArray[np.int32]:
+    """The binned phase with time running backwards.
+
+    Reversing the binned phase, rather than binning the reversed signal, makes
+    the reverse of a time-shifted surrogate exactly the surrogate of the
+    reverse, which the differenced test relies on.
+    """
+    return np.ascontiguousarray(d_phase[:, ::-1])
+
+
+def reversal_differenced_dPTE(
+    dPTE: npt.NDArray[np.float64], reversed_dPTE: npt.NDArray[np.float64]
+) -> npt.NDArray[np.float64]:
+    """
+    Combines dPTE of a recording and of its time reverse into one direction
+
+    A real interaction reverses with time, so it pushes dPTE and the dPTE of
+    the reversed recording to opposite sides of 0.5. A difference in
+    signal-to-noise ratio, or one source mixed instantaneously into two
+    channels, looks the same either way round, and pushes both to the same
+    side. Taking half the difference keeps the first and cancels the second:
+    the time-reversal-differenced statistic of Haufe et al. (2012) and
+    Winkler et al. (2016), applied to dPTE.
+
+    The cancellation is shown in simulation, not proven: Winkler et al. prove
+    it for linear models, and nonlinear coupling can survive time reversal
+    (Kořenek & Hlinka 2021). A common driver that reaches two channels at
+    different lags still reads as a direction, since that order is real.
+
+    Parameters
+    ----------
+    dPTE, reversed_dPTE : numpy.ndarray
+        m x m dPTE of the recording and of its time reverse, computed with the
+        same delay and bins
+
+    Returns
+    -------
+    differenced : numpy.ndarray
+        m x m matrix on the dPTE scale, ``0.5 + (dPTE - reversed_dPTE) / 2``.
+        Like dPTE it is antisymmetric about 0.5, so it works with group_test
+        and the other group statistics. The diagonal is zero.
+    """
+    differenced = 0.5 + (dPTE - reversed_dPTE) / 2
+    np.fill_diagonal(differenced, 0.0)
+    return differenced
 
 
 def prepare_phase(

@@ -5,6 +5,27 @@ out of this library. Two independent signals that merely differ in
 signal-to-noise ratio produce `dPTE` around `0.73` — indistinguishable from
 genuine coupling. The value has to be tested against a null.
 
+```{warning}
+**Band-pass to the rhythm of interest first, and narrowly.** On broadband
+data dPTE points from the cleaner channel to the noisier one, whatever the
+coupling ([#97](https://github.com/patrk/pyPTE/issues/97)). In simulation, a
+noisy 10 Hz driver coupled to a clean target comes out the right way round
+this often (12 recordings of 32 s each):
+
+| preprocessing | right way round |
+|---|---|
+| none, or 1–45 Hz | 0% |
+| 4–16 Hz | 0% |
+| 6–14 Hz | 17% |
+| 8–12 Hz | 100% |
+| 8–12 Hz, driver twice as noisy | 0% |
+| 8–12 Hz, `binning="hillebrand"` | 8% |
+
+Filtering helps only while the in-band signal-to-noise gap is modest, and the
+`hillebrand` bin rule gets the sign wrong even then. For a direction you can
+rely on, use the time-reversal check below.
+```
+
 Which test depends on the shape of your data.
 
 ## One long continuous recording
@@ -57,35 +78,63 @@ effect is, not whether it is real.
 
 ### Does the direction survive time reversal?
 
-A significant pair can still point the wrong way. On broadband data, dPTE
-points from the cleaner channel to the noisier one: a noisy driver coupled to a
-clean target comes out as the target driving the driver, and with enough data
-the surrogate test calls that significant
-([#97](https://github.com/patrk/pyPTE/issues/97)). Instantaneous mixing of one
-source into two channels with different noise does the same.
+A significant pair can still point the wrong way. A difference in
+signal-to-noise ratio between two coupled channels, or one source mixed
+instantaneously into two channels with different noise, gives a direction the
+surrogate test calls significant. The surrogates rule out independence, not a
+wrong direction.
 
 The check borrowed from Granger causality is to reverse time
 ([Haufe et al. 2012](https://doi.org/10.1007/978-3-642-28551-6_4);
 [Winkler et al. 2016](https://doi.org/10.1109/tsp.2016.2531628)). A real
 direction reverses with the data; one made by noise or mixing stays where it
-was.
+was. pyPTE offers it two ways:
 
 ```python
+# one continuous recording, conservative
 result = surrogate_test(signal, n_surrogates=200, seed=0, time_reversal=True)
-result.reversal_confirmed  # significant, and significantly flipped when reversed
-result.reversed_dPTE
+result.reversal_confirmed  # significant both ways round, with opposite signs
+
+# more power: segments or epochs, differenced, tested for consistency
+from pyPTE import PTE_segments
+
+dPTE, _ = PTE_segments(signal, 20, time_reversal=True)  # or PTE_from_epochs
+group_test(dPTE).significant
 ```
 
-A pair is confirmed only when it is significant in both directions of time
-with opposite signs, which is the conservative rule. The reversed recording is
-tested against the same shifts, with the forward delay and bins, so the run
-takes twice as long. It cannot catch a common driver that reaches the two
-channels at different lags: that order really is in the data, so it reverses
-like a genuine interaction.
+With `time_reversal=True`, `PTE`, `PTE_segments` and `PTE_from_epochs` return
+the *differenced* dPTE, `0.5 + (dPTE - dPTE_reversed) / 2`. Directions from
+noise or mixing cancel in it and real ones remain. `group_test` then asks
+whether that is consistent across segments, which is the right null for it.
+The surrogate test is not: its null assumes independent channels, so under
+mixing it calls random differenced values significant. `surrogate_test`
+reports `differenced_dPTE` only as an effect size.
 
-Band-pass filtering to the oscillation of interest first is what makes the
-direction come out right in the first place. Time reversal tells you when it
-has not.
+How the three compare on simulated 10 Hz recordings of 120 s each, band-passed
+to 8–12 Hz (10 recordings per cell; the segment test's false positives over 40):
+
+| | false direction, mixing | noisy driver found | twice as noisy found | equal noise found |
+|---|---|---|---|---|
+| `surrogate_test`, plain `significant` | 8/10 | 7/10 | 0/10 (2/10 backwards) | 10/10 |
+| `reversal_confirmed` | 0/10 | 7/10 | 0/10 | 10/10 |
+| `PTE_segments` + `group_test`, 10 segments | 1/40 | 9/10 | 4/10 | 10/10 |
+
+Without the band-pass, the plain test calls the noisy driver significant
+backwards in 10 recordings out of 10.
+
+- **Enough segments.** Wilcoxon over n segments cannot give a p-value below
+  2 / 2ⁿ, and Benjamini-Hochberg over P pairs needs α / P, so n must be at
+  least log₂(2P / α): 6 for two channels, 11 for ten, 17 for 64. `group_test`
+  warns when it cannot reach significance. Each segment should still span many
+  cycles.
+- **Band-pass anyway.** On broadband data the differenced value is close to
+  0.5 for everything: it no longer points the wrong way, but it finds nothing.
+- **Not proven, shown.** The cancellation is proven for linear models
+  (Winkler et al.); nonlinear coupling can survive time reversal
+  ([Kořenek & Hlinka 2021](https://doi.org/10.3390/e23081067)). The table is
+  the evidence for PTE.
+- **Common drivers.** Neither check catches a common driver that reaches the
+  two channels at different lags: that order really is in the data.
 
 ## Many short epochs, trials or subjects — usually better
 
@@ -93,6 +142,13 @@ This is what M/EEG data normally looks like, and it is **far more sensitive**,
 because it asks whether an effect is *consistent* rather than whether one number
 is extreme. Twenty-five one-second epochs settle questions that sixty continuous
 seconds leave marginal.
+
+```{note}
+The sensitivity claimed here was measured on simulations whose driver was the
+cleaner channel, which flatters dPTE. With matched signal-to-noise ratios,
+short band-passed epochs carry much less directional information; this is
+being re-measured in [#99](https://github.com/patrk/pyPTE/issues/99).
+```
 
 ```python
 import numpy as np
