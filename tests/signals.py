@@ -13,16 +13,26 @@ FS = 250.0
 
 
 def oscillator(rng, n, freq=10.0):
-    """A 10 Hz rhythm whose phase drifts, as real rhythms do."""
+    """A 10 Hz rhythm whose phase drifts, as real rhythms do.
+
+    It starts at a random phase. Starting every rhythm at zero would lock two
+    unrelated rhythms at a fixed phase offset in every short epoch, which a
+    group test across epochs reads as a consistent direction (#99).
+    """
+    start = rng.uniform(0.0, 2 * np.pi)
     drift = np.cumsum(rng.normal(0.0, 0.4 / np.sqrt(FS), n))
-    return np.sin(2 * np.pi * freq * np.arange(n) / FS + drift)
+    return np.sin(2 * np.pi * freq * np.arange(n) / FS + drift + start)
 
 
 def coupled(rng, n, *, driver_noise=0.3, target_noise=0.3, lag=12):
-    """Channel 0 drives channel 1 by `lag` samples."""
-    rhythm = oscillator(rng, n)
-    driver = rhythm + driver_noise * rng.standard_normal(n)
-    target = np.roll(rhythm, lag) + target_noise * rng.standard_normal(n)
+    """Channel 0 drives channel 1 by `lag` samples.
+
+    The lag is cut from a longer rhythm rather than rolled, since a circular
+    roll would wrap the end of the driver onto the start of the target.
+    """
+    rhythm = oscillator(rng, n + lag)
+    driver = rhythm[lag:] + driver_noise * rng.standard_normal(n)
+    target = rhythm[:n] + target_noise * rng.standard_normal(n)
     return np.vstack([driver, target])
 
 

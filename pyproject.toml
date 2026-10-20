@@ -95,6 +95,9 @@ include = ["pyPTE", "tests", "README.md", "LICENSE", "CHANGELOG.md", "CITATION.c
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+# many tests pick small bin counts on purpose; the warning itself is tested in
+# test_time_reversal.py with pytest.warns, which sees it regardless
+filterwarnings = ["ignore:.*phase bins:RuntimeWarning"]
 
 [tool.coverage.report]
 # applies whenever pytest runs with --cov, as CI does

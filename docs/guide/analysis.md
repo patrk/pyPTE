@@ -9,21 +9,29 @@ genuine coupling. The value has to be tested against a null.
 **Band-pass to the rhythm of interest first, and narrowly.** On broadband
 data dPTE points from the cleaner channel to the noisier one, whatever the
 coupling ([#97](https://github.com/patrk/pyPTE/issues/97)). In simulation, a
-noisy 10 Hz driver coupled to a clean target comes out the right way round
-this often (12 recordings of 32 s each):
+noisy 10 Hz driver coupled to a clean target, 12 samples later at 250 Hz,
+comes out the right way round this often (12 recordings of 32 s each):
 
 | preprocessing | right way round |
 |---|---|
 | none, or 1–45 Hz | 0% |
-| 4–16 Hz | 0% |
-| 6–14 Hz | 17% |
-| 8–12 Hz | 100% |
-| 8–12 Hz, driver twice as noisy | 0% |
+| 4–16 Hz or 6–14 Hz | 0% |
+| 8–12 Hz | 92% |
+| 8–12 Hz, driver twice as noisy | 8% |
 | 8–12 Hz, `binning="hillebrand"` | 8% |
 
 Filtering helps only while the in-band signal-to-noise gap is modest, and the
 `hillebrand` bin rule gets the sign wrong even then. For a direction you can
 rely on, use the time-reversal check below.
+```
+
+```{warning}
+**Use enough bins.** With fewer than about 16 phase bins, the direction dPTE
+reports for a real coupling depends on the delay: in simulation it flips sign
+from one delay to the next, while independent channels stay at 0.5
+([#99](https://github.com/patrk/pyPTE/issues/99)). Scott's rule, the default,
+gives that few on short windows, about 7 at 250 samples, so `PTE` warns when
+it happens. Analyse longer windows or set `binning=20`.
 ```
 
 Which test depends on the shape of your data.
@@ -98,7 +106,7 @@ result.reversal_confirmed  # significant both ways round, with opposite signs
 # more power: segments or epochs, differenced, tested for consistency
 from pyPTE import PTE_segments
 
-dPTE, _ = PTE_segments(signal, 20, time_reversal=True)  # or PTE_from_epochs
+dPTE, _ = PTE_segments(signal, 10, binning=20, time_reversal=True)
 group_test(dPTE).significant
 ```
 
@@ -111,22 +119,30 @@ mixing it calls random differenced values significant. `surrogate_test`
 reports `differenced_dPTE` only as an effect size.
 
 How the three compare on simulated 10 Hz recordings of 120 s each, band-passed
-to 8–12 Hz (10 recordings per cell; the segment test's false positives over 40):
+to 8–12 Hz, with the coupling 12 samples long, close to the estimated delay
+(20 recordings per cell; the segment test's false positives also over 40 more):
 
 | | false direction, mixing | noisy driver found | twice as noisy found | equal noise found |
 |---|---|---|---|---|
-| `surrogate_test`, plain `significant` | 8/10 | 7/10 | 0/10 (2/10 backwards) | 10/10 |
-| `reversal_confirmed` | 0/10 | 7/10 | 0/10 | 10/10 |
-| `PTE_segments` + `group_test`, 10 segments | 1/40 | 9/10 | 4/10 | 10/10 |
+| `surrogate_test`, plain `significant` | 17/20 | 9/20 | 0/20 (12/20 backwards) | 20/20 |
+| `reversal_confirmed` | 0/20 | 9/20 | 0/20 | 20/20 |
+| `PTE_segments` + `group_test`, 10 × 12 s, 20 bins | 0/20 (0/40) | 17/20 | 8/20 | 20/20 |
 
-Without the band-pass, the plain test calls the noisy driver significant
-backwards in 10 recordings out of 10.
+With Scott's rule those segments get 15 bins, and the segment test then called
+the equal-noise coupling significant *backwards* in 8 recordings out of 20.
+Shorter couplings are much harder: at 5 samples, dPTE barely moves off 0.5 in
+any of these settings. Where PTE's direction is reliable is being mapped in
+[#85](https://github.com/patrk/pyPTE/issues/85).
 
 - **Enough segments.** Wilcoxon over n segments cannot give a p-value below
   2 / 2ⁿ, and Benjamini-Hochberg over P pairs needs α / P, so n must be at
   least log₂(2P / α): 6 for two channels, 11 for ten, 17 for 64. `group_test`
-  warns when it cannot reach significance. Each segment should still span many
-  cycles.
+  warns when it cannot reach significance.
+- **Enough bins per segment.** Set `binning=20` rather than relying on Scott's
+  rule, which sizes bins for one segment and gives too few on short ones.
+- **Independent segments.** Segments cut from one recording share its slow
+  drift, so they are not fully independent and the test is somewhat
+  optimistic. Separate trials or recordings do not have that problem.
 - **Band-pass anyway.** On broadband data the differenced value is close to
   0.5 for everything: it no longer points the wrong way, but it finds nothing.
 - **Not proven, shown.** The cancellation is proven for linear models
@@ -136,44 +152,54 @@ backwards in 10 recordings out of 10.
 - **Common drivers.** Neither check catches a common driver that reaches the
   two channels at different lags: that order really is in the data.
 
-## Many short epochs, trials or subjects — usually better
+## Epochs, trials or subjects
 
-This is what M/EEG data normally looks like, and it is **far more sensitive**,
-because it asks whether an effect is *consistent* rather than whether one number
-is extreme. Twenty-five one-second epochs settle questions that sixty continuous
-seconds leave marginal.
-
-```{note}
-The sensitivity claimed here was measured on simulations whose driver was the
-cleaner channel, which flatters dPTE. With matched signal-to-noise ratios,
-short band-passed epochs carry much less directional information; this is
-being re-measured in [#99](https://github.com/patrk/pyPTE/issues/99).
-```
+When the data come as repeated observations, `group_test` asks whether a
+direction is consistent across them, and `group_contrast` whether it differs
+between conditions. Three settings decide whether the answer can be trusted.
 
 ```python
-import numpy as np
-from pyPTE import PTE, group_test, group_contrast
-
-matrices = np.array([PTE(epoch)[0] for epoch in epochs])  # (n_epochs, m, m)
-
-group_test(matrices)  # is connectivity above chance?
-group_contrast(task, rest)  # does it differ between conditions?
-```
-
-With MNE, `PTE_from_epochs` does the loop and estimates the delay and bins once
-over all epochs, so every matrix is computed the same way:
-
-```python
+from pyPTE import group_test
 from pyPTE.adapters.mne_adapter import PTE_from_epochs
 
-dPTE, raw_PTE = PTE_from_epochs(epochs, picks="eeg")  # (n_epochs, m, m) each
-group_test(dPTE)
+dPTE, _ = PTE_from_epochs(epochs, picks="eeg", binning=20, time_reversal=True)
+group_test(dPTE)  # (n_epochs, m, m) in, one test per pair
 ```
 
-A single epoch may be far too short for a reliable estimate on its own; what
-matters is that the estimate is unbiased, so noise averages out across
-observations. Wilcoxon signed-rank is the default, matching the convention in
-the M/EEG literature.
+- **`time_reversal=True`, always.** A difference in signal-to-noise ratio or
+  instantaneous mixing pushes dPTE the same way in every epoch, which is
+  exactly the consistency `group_test` looks for. In simulation, plain dPTE
+  over 1 s epochs reported mixing as a significant direction in 8 to 10 runs
+  out of 10, and paired a white-noise channel with rhythmic ones in 8 of 8.
+  Time reversal cancels both.
+- **`binning=20`, not Scott's rule.** Scott's rule sizes bins for one epoch and
+  gives about 7 on a 1 s epoch, where the direction follows the delay rather
+  than the data. With the default, 1 s epochs reported a real coupling as
+  significantly *backwards* in 8 to 10 runs out of 10.
+- **Long epochs, or many.** Short epochs carry little directional information.
+  Simulated coupling of 12 samples at 250 Hz with matched noise, 8–12 Hz,
+  `binning=20`, `time_reversal=True`, 10 runs each:
+
+  | epochs | found the right way | wrong way |
+  |---|---|---|
+  | 60 × 1 s | 0 | 0 |
+  | 240 × 1 s | 6 | 0 |
+  | 60 × 4 s | 6 | 0 |
+  | 30 × 8 s | 8 | 0 |
+
+`PTE_from_epochs` estimates the delay and bins once over all epochs, so every
+matrix is computed the same way. Band-pass the continuous recording before
+epoching rather than each epoch, so filter edges stay out of the epochs.
+
+**Evoked responses** need care. A response phase-locked to the stimulus gives
+two channels the same phase offset in every trial, which reads as a consistent
+direction; if the latencies differ only because of a common input, it is not
+an interaction. Subtract the evoked response first to analyse induced activity.
+
+Earlier versions of this guide called short epochs "far more sensitive" than a
+continuous recording. That came from simulations in which the driver was also
+the cleaner channel and every rhythm started at the same phase, and it does
+not hold ([#99](https://github.com/patrk/pyPTE/issues/99)).
 
 ## Correcting for multiple comparisons
 

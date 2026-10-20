@@ -6,6 +6,8 @@ direction and leaves those artefacts in place, so the difference keeps the
 first and cancels the second.
 """
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -75,7 +77,7 @@ def test_differencing_cancels_instantaneous_mixing():
 
 def test_segments_share_one_phase_delay_and_bin_count():
     data = band_pass(noisy_driver_pair(n=8000))
-    d_phase, delay, n_bins = prepare_phase(data)
+    d_phase, delay, n_bins = prepare_phase(data, n_segments=4)
     expected, expected_raw = compute_segments(
         np.array_split(d_phase, 4, axis=1), delay, n_bins
     )
@@ -140,10 +142,11 @@ def test_group_test_warns_when_too_few_observations_could_be_significant():
         group_test(dPTE)
 
 
-def test_group_test_is_quiet_with_enough_observations(recwarn):
+def test_group_test_is_quiet_with_enough_observations():
     dPTE, _ = PTE_segments(band_pass(noisy_driver_pair()), 10, time_reversal=True)
-    group_test(dPTE)
-    assert not [w for w in recwarn if issubclass(w.category, RuntimeWarning)]
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        group_test(dPTE)
 
 
 def test_group_test_warning_counts_raw_pte_both_ways():
@@ -151,3 +154,41 @@ def test_group_test_warning_counts_raw_pte_both_ways():
     # 2 ordered tests at alpha 0.05 need 2 / 2**n <= 0.025: 7 is enough
     with pytest.warns(RuntimeWarning, match="at least 7"):
         group_test(raw[:6], reference=0.0)
+
+
+# --------------------------------------------------------------------------
+# too few bins
+# --------------------------------------------------------------------------
+
+
+def test_too_few_bins_make_the_direction_depend_on_the_delay():
+    # one-second segments get about 7 bins, where a real coupling's direction
+    # follows the delay rather than the data (#99)
+    data = band_pass(coupled(np.random.default_rng(0), 250 * 120, lag=12))
+    directions = {
+        delay: PTE_segments(data, 120, binning=7, delay=delay)[0][:, 0, 1].mean()
+        for delay in (12, 13)
+    }
+    assert directions[12] > 0.6 and directions[13] < 0.4
+    # with enough bins the delay no longer decides it
+    fine = [
+        PTE_segments(data, 8, binning=20, delay=delay)[0][:, 0, 1].mean()
+        for delay in (12, 13)
+    ]
+    assert min(fine) > 0.5
+
+
+def test_few_bins_warn_with_the_window_length_needed():
+    data = band_pass(coupled(np.random.default_rng(0), 500))
+    with pytest.warns(RuntimeWarning, match="windows of at least"):
+        PTE(data)
+    with pytest.warns(RuntimeWarning, match="set binning to 16"):
+        PTE(data, binning=8)
+
+
+def test_enough_bins_do_not_warn():
+    data = band_pass(coupled(np.random.default_rng(0), 30000))
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error", ".*phase bins", RuntimeWarning)
+        PTE(data)
+        PTE(data[:, :2000], binning=16)

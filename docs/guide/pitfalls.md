@@ -27,17 +27,23 @@ pairs by raw value picks the wrong one.
 
 ## Indirect paths outrank direct ones
 
-In a chain `a → b → c → d` where only the one-hop links exist:
+In a chain `a → b → c → d` where only the one-hop links exist, with equal
+noise on every channel, band-passed, and time-reversal-differenced:
 
 | separation | mean dPTE | real edge? |
 |---|---:|---|
-| 1 hop | 0.582 | **yes** |
-| 2 hops | 0.634 | no |
-| 3 hops | **0.702** | no |
+| 1 hop | 0.571 | **yes** |
+| 2 hops | 0.622 | no |
+| 3 hops | **0.656** | no |
 
 `dPTE` rises monotonically with path length, because a longer path accumulates
-more phase lag. **Thresholding by dPTE returns close to the inverse of the true
-network.** This is the fundamental limit of any bivariate measure, and more data
+more phase lag, and PTE detects a longer lag more easily. **Thresholding by
+dPTE returns close to the inverse of the true network.** If noise also builds
+up along the chain, as it does when each node adds its own, the effect is
+stronger still, but that part is the signal-to-noise artefact, and time
+reversal removes it.
+
+The lag effect is the fundamental limit of any bivariate measure, and more data
 makes it worse: in a neural-mass simulation, recall saturated at 60 s while
 precision fell from 0.50 to 0.36 by 200 s as indirect paths became detectable.
 

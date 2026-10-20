@@ -244,18 +244,19 @@ def test_multi_process_rejects_a_zero_worker_count():
 # --------------------------------------------------------------------------
 
 
-def make_epochs(n_epochs=20, n_times=4000, seed=0):
+def make_epochs(n_epochs=20, n_times=8000, seed=0):
     """Band-passed epochs with equal, realistic noise on the coupled pair.
 
-    With matched signal-to-noise ratios a short epoch carries little
-    directional information, so these are long: 16 s each.
+    Long, at 32 s each: short epochs leave Scott's rule too few bins for a
+    reliable direction (#99). Channel 2 is white noise, which plain dPTE pairs
+    with the rhythmic channels because it is far noisier.
     """
     rng = np.random.default_rng(seed)
     epochs = [
         band_pass(
             np.vstack(
                 [
-                    coupled(rng, n_times, lag=5, driver_noise=1.0, target_noise=1.0),
+                    coupled(rng, n_times, lag=12, driver_noise=1.0, target_noise=1.0),
                     rng.standard_normal(n_times),
                 ]
             )
@@ -275,6 +276,8 @@ def test_epochs_give_one_matrix_per_epoch_ready_for_group_tests():
     assert dPTE.shape == raw.shape == (20, 3, 3)
     result = group_test(dPTE)
     assert result.significant[0, 1] and result.effect[0, 1] > 0.5
+    # without time reversal the noisier channel looks coupled to the others
+    assert result.significant[0, 2] or result.significant[1, 2]
 
 
 def test_epochs_share_one_delay_and_bin_count():
@@ -322,3 +325,5 @@ def test_epochs_can_be_time_reversal_differenced():
 
     result = group_test(dPTE)
     assert result.significant[0, 1] and result.effect[0, 1] > 0.5
+    # time reversal cancels the noisy channel's apparent coupling
+    assert not result.significant[0, 2] and not result.significant[1, 2]
