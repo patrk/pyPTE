@@ -417,3 +417,103 @@ def test_effective_pte_is_comparable_across_bin_counts():
     # coupling present; the effective value barely moves
     assert np.ptp(raw) > 0.1
     assert np.ptp(effective) < 0.25 * np.ptp(raw)
+
+
+# --------------------------------------------------------------------------
+# time reversal
+# --------------------------------------------------------------------------
+
+
+def band_pass(data, low=8.0, high=12.0):
+    from scipy.signal import butter, sosfiltfilt
+
+    sos = butter(4, [low, high], btype="band", fs=FS, output="sos")
+    return sosfiltfilt(sos, data, axis=1)
+
+
+def noisy_driver_pair(n=30000, seed=0):
+    """A noisy channel driving a clean one, so SNR points the wrong way."""
+    rng = np.random.default_rng(seed)
+    clean = oscillator(rng, n)
+    driver = clean + 1.0 * rng.standard_normal(n)
+    target = 0.9 * np.roll(clean, 12) + 0.1 * rng.standard_normal(n)
+    return np.vstack([driver, target])
+
+
+def test_genuine_direction_survives_time_reversal():
+    result = surrogate_test(
+        band_pass(noisy_driver_pair()), n_surrogates=99, seed=0, time_reversal=True
+    )
+    assert result.reversed_dPTE is not None
+    assert result.reversal_confirmed is not None
+    assert result.significant[0, 1] and result.dPTE[0, 1] > 0.5
+    assert result.reversed_dPTE[0, 1] < 0.5
+    assert result.reversal_confirmed[0, 1] and result.reversal_confirmed[1, 0]
+
+
+def test_direction_set_by_snr_fails_time_reversal():
+    # unfiltered, the cleaner target looks like the driver, significantly so;
+    # reversing time leaves that apparent direction where it was
+    result = surrogate_test(
+        noisy_driver_pair(), n_surrogates=99, seed=0, time_reversal=True
+    )
+    assert result.reversed_dPTE is not None
+    assert result.reversal_confirmed is not None
+    assert result.significant[1, 0] and result.dPTE[1, 0] > 0.5
+    assert result.reversed_dPTE[1, 0] > 0.5
+    assert not result.reversal_confirmed.any()
+
+
+def test_instantaneous_mixing_fails_time_reversal():
+    rng = np.random.default_rng(0)
+    source = oscillator(rng, 8000)
+    mixed = np.vstack(
+        [
+            source + 0.2 * rng.standard_normal(8000),
+            0.8 * source + 1.0 * rng.standard_normal(8000),
+        ]
+    )
+    result = surrogate_test(mixed, n_surrogates=99, seed=0, time_reversal=True)
+    assert result.reversal_confirmed is not None
+    assert result.significant.any()
+    assert not result.reversal_confirmed.any()
+
+
+def test_reversal_reuses_the_forward_delay_and_bins():
+    from pyPTE import PTE
+    from pyPTE.core.pyPTE import prepare_phase
+
+    data = band_pass(noisy_driver_pair(n=3000))
+    _, delay, n_bins = prepare_phase(data, binning="scott", delay="zero-crossing")
+    expected, _ = PTE(data[:, ::-1], binning=n_bins, delay=delay)
+
+    result = surrogate_test(data, n_surrogates=19, seed=0, time_reversal=True)
+    np.testing.assert_array_equal(result.reversed_dPTE, expected)
+
+
+def test_time_reversal_is_opt_in():
+    result = surrogate_test(coupled_pair(), n_surrogates=19, seed=0)
+    assert result.reversed_dPTE is None
+    assert result.reversed_p_values is None
+    assert result.reversal_confirmed is None
+    assert "reversal" not in result.summary()
+
+
+def test_summary_reports_pairs_confirmed_by_reversal():
+    result = surrogate_test(
+        band_pass(noisy_driver_pair()), n_surrogates=99, seed=0, time_reversal=True
+    )
+    # counted like the significant pairs, one per ordered pair
+    assert "2 of these confirmed by time reversal" in result.summary()
+
+
+def test_parallel_time_reversal_matches_serial():
+    data = band_pass(noisy_driver_pair(n=3000))
+    serial = surrogate_test(data, n_surrogates=19, seed=0, time_reversal=True)
+    parallel = surrogate_test(
+        data, n_surrogates=19, seed=0, time_reversal=True, n_jobs=2
+    )
+    np.testing.assert_array_equal(parallel.reversed_p_values, serial.reversed_p_values)
+    np.testing.assert_array_equal(
+        parallel.reversal_confirmed, serial.reversal_confirmed
+    )
