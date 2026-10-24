@@ -91,7 +91,7 @@ noisier one whatever the coupling.
 
 - [Tutorial](https://patrk.github.io/pyPTE/tutorial/how_pte_works.html): the measure built up from phase histograms, figure by figure
 - [Running a real analysis](https://patrk.github.io/pyPTE/guide/analysis.html): surrogate tests, epoched group tests, multiple comparisons
-- [What can fool it](https://patrk.github.io/pyPTE/guide/pitfalls.html): unequal noise, indirect paths, symmetric coupling
+- [What can fool it](https://patrk.github.io/pyPTE/guide/pitfalls.html): unequal noise, indirect paths, detuned oscillators
 - [Examples](https://patrk.github.io/pyPTE/examples.html) and [API reference](https://patrk.github.io/pyPTE/api.html)
 
 ## Contributing
