@@ -1,6 +1,6 @@
 [project]
 name = "pyPTE"
-version = "1.14.2"
+version = "1.14.3"
 description = "Phase Transfer Entropy for directed connectivity analysis, built on NumPy and SciPy"
 readme = "README.md"
 license = "GPL-3.0-or-later"
