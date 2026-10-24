@@ -17,24 +17,27 @@ written to `examples/figures/`.
 
 ### 1. `two_node_coupling.py` — does it recover direction at all?
 
-One oscillator drives another with a fixed lag. Sweeps coupling strength and
-lag, confirming dPTE rises above 0.5 in the driving direction, falls below in
-reverse, and sits at 0.5 when the two are independent.
+One oscillator drives another with a fixed lag; both carry the same noise, are
+band-passed to the rhythm and analysed with time reversal and
+`binning="locking"`. Sweeps coupling strength and lag, confirming dPTE rises
+above 0.5 in the driving direction (0.71 at full coupling), falls below in
+reverse, and sits at 0.5 when the two are independent. It grows with the lag,
+from 0.54 at 2 samples to about 0.8 near a full cycle.
 
 The fourth panel is the counterweight and the most important part: two
-**independent** oscillators differing only in signal-to-noise ratio produce a
-dPTE around 0.73. The noisier channel is less predictable from its own past, so
-the cleaner one appears to drive it. Since real M/EEG channels always differ in
-SNR, raw dPTE values are not interpretable on their own.
+**independent** oscillators differing only in signal-to-noise ratio. Plain
+dPTE climbs to 0.78 at an eight-fold noise gap, because the noisier channel is
+less predictable from its own past and the cleaner one appears to drive it.
+The time-reversal-differenced dPTE stays at 0.49.
 
 ### 2. `significance_testing.py` — what fixes that
 
-Opens up `surrogate_test` rather than just using it. Three channels: A really
-drives C, while B is independent but far noisier. In the raw matrix the artefact
-A→B (0.719) scores *higher* than the real coupling A→C (0.664). Against their
-own nulls they separate cleanly — A→B sits dead centre of its surrogate
-distribution and is rejected at p = 0.74, A→C sits outside its own and survives
-at p = 0.005.
+Opens up `surrogate_test` rather than just using it. Three band-passed
+channels: A really drives C, with equal noise, while B is independent but
+eight times noisier. In the raw matrix both A→B (0.72 on average) and A→C
+(0.85) look like findings. Against its own null the artefact is rejected in 8
+of 10 realisations, but not in the one the figure shows; time reversal rejects
+it in all ten and confirms A→C in all ten.
 
 Also draws the Benjamini-Hochberg cutoff, so the correction is visible rather
 than implied.

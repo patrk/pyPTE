@@ -2,11 +2,16 @@
 What a significance test actually does to a dPTE matrix.
 ========================================================
 
-Three channels: A really drives C with a lag, B is independent of everything but
-much noisier. In the raw matrix both A -> C and A -> B look like findings, and
-the artefact is the stronger of the two. Against their own nulls they separate
-cleanly, because B's noise raises its surrogate distribution just as much as it
-raises the observed value.
+Three channels, band-passed to the rhythm: A really drives C with a lag, and
+the two carry the same noise; B is independent of everything but eight times
+noisier. In the raw matrix both A -> C and A -> B look like findings.
+
+Against its own null the artefact is usually rejected, because B's noise
+raises its surrogate distribution just as much as the observed value: in 8 of
+10 realisations. Not in the one shown, the first, where it survives alongside
+the real coupling. Time reversal is what separates them every time: a real
+direction reverses with the data, one made by a noise gap does not, so A -> C
+is confirmed in all ten realisations and A -> B in none.
 
 Run with::
 
@@ -17,30 +22,40 @@ import argparse
 
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.signal import butter, sosfiltfilt
 
 from examples.utils import style
 from examples.utils.plotting import FIGURES, plot_matrix, save, use_house_style
 from pyPTE import surrogate_test
 
 FS = 250.0
+LAG = 12
+PAD = 500  # filtered and then dropped, so the filter's edges stay out
+ALPHA = butter(4, [8.0, 12.0], btype="band", fs=FS, output="sos")
 CHANNELS = ["A (driver)", "B (noisy, independent)", "C (driven by A)"]
 
 
 def oscillator(rng: np.random.Generator, n: int, freq: float = 10.0) -> np.ndarray:
     drift = np.cumsum(rng.normal(0.0, 0.4 / np.sqrt(FS), n))
-    return np.sin(2 * np.pi * freq * np.arange(n) / FS + drift)
+    start = rng.uniform(0.0, 2 * np.pi)
+    return np.sin(2 * np.pi * freq * np.arange(n) / FS + drift + start)
 
 
-def simulate(n_samples: int, seed: int = 3) -> np.ndarray:
+def simulate(n_samples: int, seed: int) -> np.ndarray:
     """A -> C is real. B is independent, and noisy enough to look coupled."""
     rng = np.random.default_rng(seed)
+    n = n_samples + 2 * PAD
 
-    driver = oscillator(rng, n_samples) + 0.3 * rng.standard_normal(n_samples)
-    # four times the noise of A, and no relationship to it whatsoever
-    noisy = oscillator(rng, n_samples) + 1.2 * rng.standard_normal(n_samples)
-    driven = 0.9 * np.roll(driver, 12) + 0.3 * rng.standard_normal(n_samples)
+    # C carries A's rhythm LAG samples late, cut from a longer rhythm rather
+    # than rolled, with noise of its own equal to A's
+    rhythm = oscillator(rng, n + LAG)
+    driver = rhythm[LAG:] + 0.3 * rng.standard_normal(n)
+    driven = rhythm[:n] + 0.3 * rng.standard_normal(n)
+    # eight times the noise of A, and no relationship to it whatsoever
+    noisy = oscillator(rng, n) + 2.4 * rng.standard_normal(n)
 
-    return np.vstack([driver, noisy, driven])
+    channels = np.vstack([driver, noisy, driven])
+    return sosfiltfilt(ALPHA, channels, axis=1)[:, PAD : PAD + n_samples]
 
 
 def plot_null(ax, result, i: int, j: int, *, title: str) -> None:
@@ -49,8 +64,9 @@ def plot_null(ax, result, i: int, j: int, *, title: str) -> None:
     observed = result.dPTE[i, j]
     p = result.p_values[i, j]
     survives = bool(result.significant[i, j])
+    confirmed = bool(result.reversal_confirmed[i, j])
 
-    colour = style.BLUE if survives else style.OBS
+    colour = style.BLUE if survives and confirmed else style.OBS
     ax.hist(null, bins=20, color=style.NULL, label="surrogate null")
     ax.axvline(
         observed,
@@ -62,12 +78,14 @@ def plot_null(ax, result, i: int, j: int, *, title: str) -> None:
     ax.set(xlabel="dPTE", ylabel="surrogates", title=title)
     ax.legend(fontsize=7, loc="upper left")
     ax.text(
-        0.98,
-        0.95,
-        f"p = {p:.3f}\n{'SIGNIFICANT' if survives else 'not significant'}",
+        0.02,
+        0.80,
+        f"p = {p:.3f}, {'significant' if survives else 'not significant'}\n"
+        f"time reversal: {'CONFIRMED' if confirmed else 'NOT CONFIRMED'}",
         transform=ax.transAxes,
-        ha="right",
+        ha="left",
         va="top",
+        bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.9},
         fontsize=8,
         color=colour,
         weight="bold",
@@ -83,12 +101,37 @@ def main(quick: bool = False) -> None:
     # pair uncallable no matter how strong the coupling.
     n_samples = 16000
     n_surrogates = 200 if quick else 400
+    seeds = range(3 if quick else 10)
 
-    print(f"running {n_surrogates} surrogates ...")
-    result = surrogate_test(
-        simulate(n_samples), n_surrogates=n_surrogates, seed=0, keep_null=True
-    )
-    print(" ", result.summary())
+    outcomes = []
+    for seed in seeds:
+        print(f"realisation {seed}: {n_surrogates} surrogates ...")
+        found = surrogate_test(
+            simulate(n_samples, seed),
+            n_surrogates=n_surrogates,
+            seed=seed,
+            keep_null=seed == 0,
+            time_reversal=True,
+        )
+        outcomes.append(
+            (
+                found.dPTE[0, 1],
+                bool(found.significant[0, 1]),
+                bool(found.directed[0, 2]),
+                bool(found.reversal_confirmed[0, 2]),
+                bool(found.reversal_confirmed[0, 1]),
+            )
+        )
+        if seed == 0:
+            result = found
+            print(" ", result.summary())
+    (
+        artefact,
+        artefact_kept,
+        coupling_found,
+        coupling_confirmed,
+        artefact_confirmed,
+    ) = map(np.array, zip(*outcomes, strict=True))
 
     fig, axes = plt.subplots(2, 2, figsize=(10.5, 7.5), constrained_layout=True)
 
@@ -129,11 +172,11 @@ def main(quick: bool = False) -> None:
     ax.legend(fontsize=8, loc="lower right")
 
     # -- what the correction removes --------------------------------------
-    masked = np.where(result.significant, result.dPTE, np.nan)
+    masked = np.where(result.reversal_confirmed, result.dPTE, np.nan)
     plot_matrix(
         axes[1, 1],
         masked,
-        title="dPTE, keeping only what survived",
+        title="dPTE, keeping what time reversal confirms",
         labels=["A", "B", "C"],
         center_on_half=True,
         mask_diagonal=True,
@@ -142,7 +185,7 @@ def main(quick: bool = False) -> None:
 
     save(fig, FIGURES / "significance_testing.png")
 
-    print("\nraw dPTE (both A->B and A->C look like findings)")
+    print("\nrealisation 0, raw dPTE (both A->B and A->C look like findings)")
     for i, name in enumerate(CHANNELS):
         row = "  ".join(f"{result.dPTE[i, j]:.3f}" for j in range(3))
         print(f"  {name:<24} {row}")
@@ -154,17 +197,32 @@ def main(quick: bool = False) -> None:
             f"   null mean {result.null_mean[source, target]:.3f}"
             f"   p {result.p_values[source, target]:.3f}"
             f"   {'kept' if result.significant[source, target] else 'rejected'}"
+            f", {'' if result.reversal_confirmed[source, target] else 'not '}"
+            "confirmed by time reversal"
         )
 
-    assert result.dPTE[0, 1] > 0.6, "the artefact should look like a finding"
-    assert result.significant[0, 2], "the real coupling must survive"
-    assert not result.significant[0, 1], "the SNR artefact must not survive"
+    n = len(outcomes)
+    print(f"\nover {n} realisations")
+    print(
+        f"  A -> B artefact   mean dPTE {artefact.mean():.3f}, "
+        f"kept {artefact_kept.sum()}, confirmed by time reversal "
+        f"{artefact_confirmed.sum()}"
+    )
+    print(
+        f"  A -> C coupling   found {coupling_found.sum()}, "
+        f"confirmed by time reversal {coupling_confirmed.sum()}"
+    )
+
+    assert artefact.mean() > 0.6, "the artefact should look like a finding"
+    assert artefact_kept.sum() <= n // 3, "the SNR artefact should mostly be rejected"
+    assert coupling_found.all(), "the real coupling must survive, the right way round"
+    assert coupling_confirmed.sum() >= n - 1, "time reversal should confirm it"
+    assert not artefact_confirmed.any(), "time reversal should never confirm the gap"
 
     print(
-        "\nverified: the two pairs are indistinguishable in the raw matrix and"
-        "\n          cleanly separated against the null. Report dPTE without a"
-        "\n          significance test and the artefact is indistinguishable"
-        "\n          from the finding."
+        "\nverified: both pairs look like findings in the raw matrix. The null"
+        "\n          rejects the artefact most of the time; time reversal"
+        "\n          rejects it every time and confirms the real coupling."
     )
 
 

@@ -16,11 +16,13 @@ Two **completely independent** oscillators differing only in noise level:
 The noisier channel is harder to predict from its own past, so the cleaner one
 looks like a driver. Real recordings always differ in SNR between channels.
 
-A surrogate test removes it cleanly: for such a pair the null mean lands at
-`0.739` against an observed `0.736`, and it is correctly rejected — while
-genuine coupling survives at `p = 0.005`. In one worked case the artefact even
-has a **higher** raw `dPTE` (0.719) than the real coupling (0.664), so ranking
-pairs by raw value picks the wrong one.
+Band-passing shrinks it but does not remove it: after an 8–12 Hz filter, an
+eight-fold noise gap still gives `0.72`. A surrogate test usually rejects it,
+because shifted surrogates keep each channel's noise and so carry the same
+artefact: in 8 of 10 realisations, but it survived in the other two. Time
+reversal rejected it in all ten, and confirmed the real coupling in the same
+recordings in all ten. With `time_reversal=True` the differenced dPTE of the
+independent pair stays at `0.49` at any noise ratio.
 
 → [`two_node_coupling.py`](https://github.com/patrk/pyPTE/blob/main/examples/two_node_coupling.py),
 [`significance_testing.py`](https://github.com/patrk/pyPTE/blob/main/examples/significance_testing.py)
