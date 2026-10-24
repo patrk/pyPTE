@@ -61,8 +61,8 @@ Jansen-Rit cortical columns producing a genuine alpha rhythm (verified at
 ~11 Hz with essentially all power in the 8–13 Hz band), coupled with a
 transmission delay.
 
-Recall reaches 1.0 by 60 s and saturates; precision then *falls*, from 0.50 to
-0.36 by 200 s, as indirect paths become detectable. Those extra detections are
+Recall reaches 1.0 by 30 s and saturates; precision then *falls*, from 0.50 to
+0.25 by 160 s, as indirect paths become detectable. Those extra detections are
 not errors — information genuinely flows that way — but they are not edges of
 the network you were trying to recover. There is an optimum recording length for
 network reconstruction.

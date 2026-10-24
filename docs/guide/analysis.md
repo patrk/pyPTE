@@ -39,8 +39,9 @@ Which test depends on the shape of your data.
 ## One long continuous recording
 
 Compare the observed matrix against **time-shifted surrogates**: each channel is
-circularly shifted by an independent random offset, which preserves every
-per-channel property exactly while destroying cross-channel timing. Any apparent
+circularly shifted by its own random offset, at least 5% of the recording away
+from every other channel's, which preserves every per-channel property exactly
+while destroying cross-channel timing. Any apparent
 direction that survives comes from the interaction rather than the channels.
 
 ```python
