@@ -230,6 +230,19 @@ def test_summary_mentions_the_correction():
     assert str(result.n_surrogates) in result.summary()
 
 
+def test_directed_marks_each_significant_pair_once_from_driver_to_target():
+    # significant flags both orientations of a pair, since dPTE[j, i] is
+    # 1 - dPTE[i, j]; scoring it against a directed truth counts the mirror of
+    # every real edge as a false one (#103)
+    result = surrogate_test(coupled_pair(), n_surrogates=99, seed=0)
+    assert result.significant[0, 1] and result.significant[1, 0]
+    np.testing.assert_array_equal(result.directed, [[False, True], [False, False]])
+    np.testing.assert_array_equal(
+        result.directed, result.significant & (result.dPTE > 0.5)
+    )
+    assert result.summary().startswith("1 of 1 channel pairs significant")
+
+
 def test_rejects_bad_input():
     with pytest.raises(ValueError, match="m x n"):
         surrogate_test(np.zeros(10), n_surrogates=5)
@@ -512,8 +525,8 @@ def test_summary_reports_pairs_confirmed_by_reversal():
     result = surrogate_test(
         band_pass(noisy_driver_pair()), n_surrogates=99, seed=0, time_reversal=True
     )
-    # counted like the significant pairs, one per ordered pair
-    assert "2 of these confirmed by time reversal" in result.summary()
+    # counted like the significant pairs, once per channel pair
+    assert "1 of these confirmed by time reversal" in result.summary()
 
 
 def test_parallel_time_reversal_matches_serial():
