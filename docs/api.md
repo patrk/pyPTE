@@ -10,6 +10,7 @@
 .. autofunction:: pyPTE.core.pyPTE.compute_segments
 .. autofunction:: pyPTE.core.pyPTE.prepare_phase
 .. autofunction:: pyPTE.core.pyPTE.compute_dPTE_rawPTE
+.. autofunction:: pyPTE.core.pyPTE.locking_bincount
 .. autofunction:: pyPTE.core.pyPTE.get_bincount_auto
 ```
 

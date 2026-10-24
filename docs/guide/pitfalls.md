@@ -32,9 +32,9 @@ noise on every channel, band-passed, and time-reversal-differenced:
 
 | separation | mean dPTE | real edge? |
 |---|---:|---|
-| 1 hop | 0.571 | **yes** |
-| 2 hops | 0.622 | no |
-| 3 hops | **0.656** | no |
+| 1 hop | 0.576 | **yes** |
+| 2 hops | 0.625 | no |
+| 3 hops | **0.659** | no |
 
 `dPTE` rises monotonically with path length, because a longer path accumulates
 more phase lag, and PTE detects a longer lag more easily. **Thresholding by

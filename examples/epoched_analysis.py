@@ -5,8 +5,9 @@ A two-condition analysis on epochs, which is how M/EEG data usually arrive.
 Runs the whole pipeline: band-pass, epoch, dPTE per epoch, group statistics,
 correction. Three settings make the answer trustworthy, and the example uses
 all of them: time-reversal-differenced dPTE, so that differences in
-signal-to-noise ratio cannot pose as direction; 20 phase bins, since fewer let
-the delay decide a coupling's direction; and epochs long enough to carry
+signal-to-noise ratio cannot pose as direction; bins sized by how tightly the
+channels lock (binning="locking"), since too few let the delay decide a
+coupling's direction; and epochs long enough to carry
 directional information, 8 s here.
 
 Compares both corrections. FDR bounds the share of wrong edges among those
@@ -74,7 +75,9 @@ def dpte_per_epoch(n_epochs: int, coupling: float, offset: int = 0) -> np.ndarra
     """Time-reversal-differenced dPTE per epoch, delay and bins shared."""
     n_samples = int(EPOCH_SECONDS * FS)
     epochs = np.array([epoch(n_samples, coupling, s + offset) for s in range(n_epochs)])
-    d_phase, delay, n_bins = prepare_phase(epochs.reshape(-1, n_samples), binning=20)
+    d_phase, delay, n_bins = prepare_phase(
+        epochs.reshape(-1, n_samples), binning="locking", channels_per_group=4
+    )
     dPTE, _ = compute_segments(
         list(d_phase.reshape(n_epochs, 4, -1)), delay, n_bins, time_reversal=True
     )
