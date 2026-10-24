@@ -98,14 +98,17 @@ bundled 76-region connectome, derived from tract-tracing rather than diffusion
 imaging, so the directionality is genuine anatomy: 268 of its 1,560 edges exist
 in one direction only, while tract lengths are correctly symmetric.
 
-The result is largely negative, which is why it is worth running. pyPTE
-separates one-way edges from unconnected pairs at **AUC 0.62**, against 0.96–1.00
-for the sparse synthetic networks above. At 27% density nearly every region pair
-is joined by a short indirect path — the same limitation as example 5, at whole-
-brain scale.
+The result is largely negative, which is why it is worth running. Band-passed
+and time-reversed, dPTE sees which regions connect (|dPTE − 0.5| separates
+one-way tracts from unconnected pairs at **AUC 0.78**) but not which way: its
+sign scores **0.53**. At 27% density nearly every region pair is also joined by
+short indirect paths — the same limitation as example 5, at whole-brain scale.
+Plain dPTE scores 0.39, below chance, because regions receiving more input
+oscillate more cleanly and read as drivers. TVB stores its weights as
+`[to, from]`, so the example scores dPTE against their transpose.
 
-It also runs into an arithmetic wall: 5,700 ordered pairs put the strictest FDR
-threshold below `1e-5`, while `N` surrogates cannot yield a p-value below
+It also runs into an arithmetic wall: 2,850 channel pairs put the strictest FDR
+threshold below `2e-5`, while `N` surrogates cannot yield a p-value below
 `1 / (N + 1)`, so nothing survives edgewise testing at a practical surrogate
 count. Use `cluster_permutation` at this scale.
 

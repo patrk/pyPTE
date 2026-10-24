@@ -68,11 +68,21 @@ will penalise it for being right.
 
 ## On a real connectome, structural recovery largely fails
 
-Against The Virtual Brain's directed 76-region tract-tracing connectome, pyPTE
-separates one-way edges from unconnected pairs at **AUC 0.62** — above chance,
-but far from the 0.96–1.00 the same estimator reaches on sparse synthetic
-networks. At 27% density nearly every region pair is joined by a short indirect
-path, which is the previous caveat operating at whole-brain scale.
+Against The Virtual Brain's directed 76-region tract-tracing connectome,
+band-passed and time-reversed dPTE sees *that* two regions are connected but
+not which way. How far it sits from 0.5, on either side, separates one-way
+tracts from unconnected pairs at **AUC 0.78**; its sign does so at **0.53**,
+barely above chance. At 27% density nearly every region pair is also joined by
+short indirect paths, which is the previous caveat operating at whole-brain
+scale.
+
+Plain dPTE scores **0.39**, below chance. Regions that receive more input
+oscillate more strongly (rank correlation 1.0), so their rhythm is cleaner,
+and dPTE reads the cleaner channel as the driver: the signal-to-noise artefact
+again, here pointing against the anatomy. An earlier version of this page
+reported AUC 0.62; that came from the same artefact, scored against the
+connectome transposed. TVB stores its weights as `[to, from]`
+([#106](https://github.com/patrk/pyPTE/issues/106)).
 
 Scale bites twice. With `m` regions there are `m * (m - 1) / 2` channel pairs —
 2,850 here — so the strictest FDR threshold falls below `2e-5`, while `N` surrogates cannot

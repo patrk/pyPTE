@@ -15,10 +15,11 @@ run on every documentation build, so this page reads a cached result made by
 # %%
 # How often does a strong flow sit on a real tract?
 # -------------------------------------------------
-# Rank every ordered pair by dPTE and ask how well that ranking separates
-# one-way tracts from unconnected pairs. An AUC of 0.5 is chance; the same
-# estimator reaches 0.96 to 1.00 on the sparse synthetic networks of the
-# tutorial.
+# The activity was band-passed to its dominant rhythm and analysed with time
+# reversal. Rank every ordered pair by dPTE and ask how well that ranking
+# separates one-way tracts from unconnected pairs; an AUC of 0.5 is chance.
+# Then rank by how far dPTE sits from 0.5, on either side, which asks only
+# whether two regions are connected.
 
 from pathlib import Path
 
@@ -29,19 +30,25 @@ from examples.utils import style, teaching
 
 style.use()
 cache = np.load(Path("..") / "_data" / "tvb_flow.npz")
-weights, dPTE, labels = cache["weights"], cache["dPTE"], list(cache["labels"])
+# [i, j] is the tract from region i to region j
+tracts, dPTE, labels = cache["tracts"], cache["dPTE"], list(cache["labels"])
 
-off_diagonal = ~np.eye(weights.shape[0], dtype=bool)
-one_way = (weights > 0) & (weights.T == 0)
-unconnected = off_diagonal & (weights == 0) & (weights.T == 0)
-scores = np.concatenate([dPTE[one_way], dPTE[unconnected]])
-ranks = rankdata(scores)
+off_diagonal = ~np.eye(tracts.shape[0], dtype=bool)
+one_way = (tracts > 0) & (tracts.T == 0)
+unconnected = off_diagonal & (tracts == 0) & (tracts.T == 0)
 n_pos, n_neg = int(one_way.sum()), int(unconnected.sum())
-auc = (ranks[:n_pos].sum() - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg)
-density = (weights > 0).sum() / off_diagonal.sum()
+
+
+def auc(score):
+    ranks = rankdata(np.concatenate([score[one_way], score[unconnected]]))
+    return (ranks[:n_pos].sum() - n_pos * (n_pos + 1) / 2) / (n_pos * n_neg)
+
+
+density = (tracts > 0).sum() / off_diagonal.sum()
 print(
-    f"{weights.shape[0]} regions, {density:.0%} of pairs connected, "
-    f"{n_pos} one-way tracts, AUC {auc:.2f}"
+    f"{tracts.shape[0]} regions, {density:.0%} of pairs connected, "
+    f"{n_pos} one-way tracts\n"
+    f"AUC by direction {auc(dPTE):.2f}, by distance from 0.5 {auc(abs(dPTE - 0.5)):.2f}"
 )
 
 # %%
@@ -51,8 +58,9 @@ print(
 # the 60 strongest one-way tracts, mostly within a hemisphere. **b** shows the
 # 60 strongest dPTE flows, in red where a one-way tract runs the same way.
 #
-# With most region pairs connected, nearly every pair is also joined by a
-# short indirect route, and dPTE ranks those as highly as direct ones. Use it
-# to ask which way activity flows, not to infer the wiring.
+# dPTE sees that two regions are connected far better than which way the
+# tract runs. With most region pairs connected, nearly every pair is also
+# joined by short indirect routes, which can run either way. Use it to ask
+# which way activity flows, not to infer the wiring.
 
-teaching.chord_pair(weights, dPTE, labels)
+teaching.chord_pair(tracts, dPTE, labels)
