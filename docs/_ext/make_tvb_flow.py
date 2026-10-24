@@ -15,20 +15,21 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from examples.tvb_connectome import simulate  # noqa: E402
-from pyPTE import PTE  # noqa: E402
+from examples.tvb_connectome import flow, simulate, tracts  # noqa: E402
 
 SECONDS = 120.0
 
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     brain, signal = simulate(SECONDS)
-dPTE, _ = PTE(signal)
+# band-passed and time-reversed, as the example runs it
+dPTE = flow(signal)
 
 out = ROOT / "docs" / "_data" / "tvb_flow.npz"
 np.savez_compressed(
     out,
-    weights=brain.weights.astype(np.float32),
+    # [i, j] is the tract from region i to j; TVB stores the transpose
+    tracts=tracts(brain).astype(np.float32),
     dPTE=dPTE.astype(np.float32),
     labels=np.array([str(label) for label in brain.region_labels]),
     seconds=SECONDS,
