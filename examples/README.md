@@ -61,11 +61,13 @@ Jansen-Rit cortical columns producing a genuine alpha rhythm (verified at
 ~11 Hz with essentially all power in the 8–13 Hz band), coupled with a
 transmission delay.
 
-Recall reaches 1.0 by 30 s and saturates; precision then *falls*, from 0.50 to
-0.25 by 160 s, as indirect paths become detectable. Those extra detections are
-not errors — information genuinely flows that way — but they are not edges of
-the network you were trying to recover. There is an optimum recording length for
-network reconstruction.
+Eight columns in a directed ring, five realisations, 15 to 200 s, band-passed
+and scored with `result.directed`. Each realisation goes from finding nothing
+to finding every edge, the right way round, somewhere between 15 and 60 s; the
+two- and three-hop paths become significant with them, so precision is 0.5 at
+15 s and a third from then on. Those paths are not errors — information
+genuinely flows that way — but they are not edges of the network, and no
+recording length separates the two.
 
 ### 5. `epoched_analysis.py` — the pipeline you would actually run
 

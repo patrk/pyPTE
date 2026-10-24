@@ -72,7 +72,11 @@ class SignificanceResult:
         m x m one-sided p-values against the surrogate null. The diagonal is
         set to 1.0, since self-transfer is identically zero.
     significant : numpy.ndarray
-        m x m boolean mask of pairs surviving multiple-comparison correction
+        m x m boolean mask of pairs surviving multiple-comparison correction.
+        It marks a pair in both orientations, since ``dPTE[j, i]`` is
+        ``1 - dPTE[i, j]`` and the test is the same; which way the pair points
+        is the side of 0.5 dPTE falls on. Use ``directed`` to score against a
+        directed ground truth, or each real edge also counts as a false one.
     threshold : float
         largest p-value called significant, or 0.0 if nothing survived
     null_mean : numpy.ndarray
@@ -127,17 +131,22 @@ class SignificanceResult:
     def n_significant(self) -> int:
         return int(self.significant.sum())
 
+    @property
+    def directed(self) -> npt.NDArray[np.bool_]:
+        """m x m mask of significant pairs, at [driver, target] only."""
+        return self.significant & (self.dPTE > 0.5)
+
     def summary(self) -> str:
         m = self.dPTE.shape[0]
-        pairs = m * (m - 1)
+        pairs = m * (m - 1) // 2
         reversal = (
             ""
             if self.reversal_confirmed is None
-            else f", {int(self.reversal_confirmed.sum())} of these confirmed by "
-            "time reversal"
+            else f", {int(self.reversal_confirmed.sum()) // 2} of these confirmed "
+            "by time reversal"
         )
         return (
-            f"{self.n_significant} of {pairs} directed pairs significant "
+            f"{int(self.directed.sum())} of {pairs} channel pairs significant "
             f"at p <= {self.threshold:.4g}{reversal} "
             f"({self.n_surrogates} surrogates, Benjamini-Hochberg corrected)"
         )
@@ -675,7 +684,10 @@ class GroupResult:
     p_values : numpy.ndarray
         m x m p-values, with the diagonal set to 1.0
     significant : numpy.ndarray
-        m x m boolean mask surviving Benjamini-Hochberg correction
+        m x m boolean mask surviving Benjamini-Hochberg correction. For dPTE
+        and for differences of dPTE it marks a pair in both orientations, as
+        the two are one test; ``effect`` says which way it points (above the
+        reference of 0.5 for group_test, above 0 for group_contrast).
     threshold : float
         largest p-value called significant, or 0.0 if nothing survived
     effect : numpy.ndarray

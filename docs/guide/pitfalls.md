@@ -44,11 +44,13 @@ stronger still, but that part is the signal-to-noise artefact, and time
 reversal removes it.
 
 The lag effect is the fundamental limit of any bivariate measure, and more data
-makes it worse: in a neural-mass simulation, recall saturated at 30 s while
-precision fell from 0.50 to 0.25 by 160 s as indirect paths became detectable.
-
-There is therefore an optimum recording length for network reconstruction, and
-it is not "as much as possible".
+does not get around it. In a ring of eight neural-mass columns, each of five
+realisations went from finding nothing to finding every edge the right way
+round somewhere between 15 and 60 s, and the two- and three-hop paths became
+significant with the edges: precision was 0.5 at 15 s and a third from then
+on. A significant dPTE identifies a directed path, not an edge; separating the
+two needs a conditional measure
+([#87](https://github.com/patrk/pyPTE/issues/87)).
 
 → [`epoched_analysis.py`](https://github.com/patrk/pyPTE/blob/main/examples/epoched_analysis.py),
 [`neural_mass_network.py`](https://github.com/patrk/pyPTE/blob/main/examples/neural_mass_network.py)
@@ -81,7 +83,7 @@ alternative.
 ## Detection is model-dependent
 
 There is no universal sample requirement. Phase oscillators resolve in a few
-thousand samples; realistic Jansen-Rit columns needed tens of seconds, and were
+thousand samples; realistic Jansen-Rit columns needed 15 to 60 s, and were
 strongly sensitive to the transmission delay. Effect size depends on the
 dynamics, the SNR and the lag, which is why group-level testing is the robust
 answer rather than a rule of thumb.

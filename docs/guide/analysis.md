@@ -54,7 +54,8 @@ from pyPTE import surrogate_test
 
 result = surrogate_test(signal, n_surrogates=200, seed=0)
 print(result.summary())
-result.significant  # boolean mask, FDR corrected
+result.significant  # boolean mask, FDR corrected, both orientations of a pair
+result.directed  # the same pairs, marked from driver to target only
 result.p_values
 ```
 
