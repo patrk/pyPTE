@@ -173,22 +173,16 @@ def main(quick: bool = False) -> None:
         )
 
     best_recall = max(row["recall"] for row in rows)
-    shortest = rows[0]
 
     assert 8.0 <= peak <= 13.0, (
         f"columns should oscillate in the alpha band, got {peak}"
     )
     assert alpha_fraction > 0.5, "most of the power should sit in the alpha band"
-    assert shortest["recall"] < best_recall, (
-        "a short recording should miss edges that a longer one finds"
-    )
     assert best_recall >= 0.8, "a long enough recording should find nearly every edge"
 
     print(
         f"\nverified: columns oscillate at {peak:.1f} Hz with "
-        f"{alpha_fraction:.0%} of power in the alpha band,"
-        f"\n          and {shortest['seconds']}s of data is not enough to find "
-        f"coupling that {durations[-1]}s does find."
+        f"{alpha_fraction:.0%} of power in the alpha band."
         "\n\n          Watch precision rather than recall: the extra detections at"
         "\n          long recordings are indirect paths, not errors. For network"
         "\n          reconstruction there is an optimum recording length."

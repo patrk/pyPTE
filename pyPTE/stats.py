@@ -9,8 +9,10 @@ this above 0.5" but "is it further from 0.5 than chance allows".
 The null comes from time-shifted surrogates: circularly shifting each channel by
 its own random offset preserves that channel's spectrum, amplitude distribution
 and entropy exactly, while destroying the cross-channel timing that coupling
-depends on. Whatever survives is a property of the interaction rather than of
-the individual channels.
+depends on. Every two channels are shifted at least 5% of the recording apart,
+since a pair moved by nearly the same offset keeps its timing. Whatever
+survives is a property of the interaction rather than of the individual
+channels.
 """
 
 import os
@@ -150,7 +152,7 @@ def time_shifted_surrogate(
     *,
     min_fraction: float = 0.05,
 ) -> npt.NDArray[_Scalar]:
-    """Circularly shift every channel by an independent random offset.
+    """Circularly shift every channel by its own random offset.
 
     Parameters
     ----------
@@ -158,9 +160,11 @@ def time_shifted_surrogate(
         m x n array of m channels
     rng : numpy.random.Generator
     min_fraction : float
-        smallest permitted shift, as a fraction of the recording length. Shifts
-        close to zero would leave the original alignment largely intact and bias
-        the null towards the observed value.
+        smallest permitted shift of any channel relative to any other, as a
+        fraction of the recording length. Two channels shifted by nearly the
+        same offset keep their alignment, and with it their coupling, which
+        biases the null towards the observed value. With more channels than
+        fit at that spacing, they are spread evenly instead.
 
     Returns
     -------
@@ -169,16 +173,37 @@ def time_shifted_surrogate(
         cross-channel timing
     """
     m, n = time_series.shape
-    return _apply_shifts(time_series, _draw_shifts(m, n, rng, min_fraction))
+    gap = _shift_gap(m, n, min_fraction)
+    return _apply_shifts(time_series, _draw_shifts(m, n, rng, gap))
+
+
+def _shift_gap(m: int, n: int, min_fraction: float = 0.05) -> int:
+    """Smallest shift between two channels, as _draw_shifts keeps them apart."""
+    gap = max(int(n * min_fraction), 1)
+    if m * gap > n:
+        gap = max(n // m, 1)
+        warnings.warn(
+            f"too many channels to shift every pair at least {min_fraction:.0%} "
+            f"of the recording apart; pairs are kept {gap} samples apart instead",
+            RuntimeWarning,
+            stacklevel=3,
+        )
+    return gap
 
 
 def _draw_shifts(
-    m: int, n: int, rng: np.random.Generator, min_fraction: float = 0.05
+    m: int, n: int, rng: np.random.Generator, gap: int
 ) -> npt.NDArray[np.int64]:
-    """One random circular shift per channel, as time_shifted_surrogate draws."""
-    low = max(int(n * min_fraction), 1)
-    high = max(n - low, low + 1)
-    return rng.integers(low, high, size=m)
+    """One random circular shift per channel, every two at least gap apart.
+
+    Only shifts relative to each other matter for a pair, so the m shifts are
+    placed on the circle of n samples with at least gap between neighbours:
+    m sorted draws from the n - m * gap samples left over, each moved on by
+    gap times its rank, then rotated at random and dealt to random channels.
+    """
+    slack = rng.integers(0, n - m * gap + 1, size=m)
+    points = np.sort(slack) + gap * np.arange(m)
+    return rng.permutation((points + rng.integers(n)) % n)
 
 
 def _apply_shifts(
@@ -576,7 +601,8 @@ def surrogate_test(
     # of the Hilbert transform. Drawing every shift here, in order, makes the
     # null identical however many workers compute it.
     m, n = d_phase.shape
-    shifts = np.array([_draw_shifts(m, n, rng) for _ in range(n_surrogates)])
+    gap = _shift_gap(m, n)
+    shifts = np.array([_draw_shifts(m, n, rng, gap) for _ in range(n_surrogates)])
 
     forward = _shift_test(
         d_phase,

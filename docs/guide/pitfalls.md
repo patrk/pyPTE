@@ -44,8 +44,8 @@ stronger still, but that part is the signal-to-noise artefact, and time
 reversal removes it.
 
 The lag effect is the fundamental limit of any bivariate measure, and more data
-makes it worse: in a neural-mass simulation, recall saturated at 60 s while
-precision fell from 0.50 to 0.36 by 200 s as indirect paths became detectable.
+makes it worse: in a neural-mass simulation, recall saturated at 30 s while
+precision fell from 0.50 to 0.25 by 160 s as indirect paths became detectable.
 
 There is therefore an optimum recording length for network reconstruction, and
 it is not "as much as possible".
@@ -81,7 +81,7 @@ alternative.
 ## Detection is model-dependent
 
 There is no universal sample requirement. Phase oscillators resolve in a few
-thousand samples; realistic Jansen-Rit columns needed 60 s or more, and were
+thousand samples; realistic Jansen-Rit columns needed tens of seconds, and were
 strongly sensitive to the transmission delay. Effect size depends on the
 dynamics, the SNR and the lag, which is why group-level testing is the robust
 answer rather than a rule of thumb.
