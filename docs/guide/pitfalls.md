@@ -57,12 +57,23 @@ two needs a conditional measure
 → [`epoched_analysis.py`](https://github.com/patrk/pyPTE/blob/main/examples/epoched_analysis.py),
 [`neural_mass_network.py`](https://github.com/patrk/pyPTE/blob/main/examples/neural_mass_network.py)
 
-## Symmetric coupling is invisible — by design
+## Symmetric coupling is not a no-direction control
 
-Strongly but *symmetrically* coupled channels sit at exactly `0.500`. That is
-the correct answer, not a miss: `dPTE` measures **net** direction, and a
-balanced bidirectional link has none. Score it against raw connectivity and you
-will penalise it for being right.
+Equal coupling weights both ways do not mean equal information flow. In the
+Kuramoto example's two-group network, symmetrically coupled oscillators whose
+natural frequencies differ (sd 0.5 Hz around 10 Hz) sit on average **0.11**
+from 0.5, against 0.19 for the one-way bridges; with identical frequencies
+the gap shrinks to 0.02. The sign follows neither the natural frequencies nor
+which oscillator leads in phase.
+
+Averaging `dPTE` over both orientations of a pair cannot detect this:
+`dPTE[i, j] + dPTE[j, i] = 1`, so that mean is 0.5 whatever the data. Judge a
+pair by its distance from 0.5.
+
+The same network shows the indirect-path limit above. A bridge's input
+spreads through its tightly synchronised group, so every A → B pair carries
+real flow: bridges outrank their own reverse with AUC 0.97 but outrank those
+indirect pairs only 0.67 ± 0.18 of the time, over 20 realisations.
 
 → [`kuramoto_network.py`](https://github.com/patrk/pyPTE/blob/main/examples/kuramoto_network.py)
 

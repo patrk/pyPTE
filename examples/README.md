@@ -49,14 +49,21 @@ regardless of effect size.
 ### 3. `kuramoto_network.py` — recovering a known graph
 
 Delayed Kuramoto oscillators in two topologies: a directed ring, and two
-symmetrically-wired groups joined by one-way bridges. Scored with AUC (0.96 and
-1.00), which needs no threshold, because the recovered matrix is dense while the
-truth is sparse.
+symmetrically-wired groups joined by one-way bridges, each over 20 noise
+realisations. Scored with AUC, which needs no threshold, because the recovered
+matrix is dense while the truth is sparse.
 
-The two-group case makes a distinction that is easy to get wrong:
-**dPTE measures direction, not the presence of coupling.** The strongly but
-*symmetrically* coupled pairs inside each group sit at exactly 0.5. That is the
-correct answer, not a miss — there is no net direction to find.
+- The ring is recovered in every realisation: AUC 0.95 ± 0.03, lowest 0.88.
+- The two groups score 0.84 ± 0.10, as low as 0.59, and 4 of 20 realisations
+  fall below 0.75. Bridges are reported the right way round (AUC 0.97 against
+  their reverse), but a bridge's input spreads through its synchronised group,
+  so the indirect A → B pairs compete with it (0.67 ± 0.18).
+- Symmetrically coupled pairs do not sit at 0.5. Their natural frequencies
+  differ, and that gives each pair a direction: 0.11 from 0.5 on average,
+  against 0.19 for a bridge. Averaging a pair's two orientations always gives
+  exactly 0.5, which is how an earlier version of this example missed it.
+
+A single realisation would have given 1.00 for the two groups (seed 1) or 0.59.
 
 ### 4. `neural_mass_network.py` — how much data, and what more of it buys
 
@@ -128,8 +135,8 @@ coupling, so the example uses `Generic2dOscillator`.
 - `models/kuramoto.py` — delayed Kuramoto oscillators with arbitrary directed
   coupling, plus topology builders: `ring_with_shortcut`, `two_groups`,
   `global_coupling` (mean-field) and `local_coupling` (nearest-neighbour). The
-  symmetric variants are useful as negative controls, since a directional
-  measure should correctly find nothing in them.
+  symmetric variants are negative controls only with `freq_spread=0`: detuned
+  oscillators read as directed even when the coupling is symmetric.
 - `models/neural_mass_model.py` — coupled Jansen-Rit columns, integrated with
   stochastic Heun and a delay ring buffer.
 - `utils/plotting.py` — shared figure style and a connectivity-matrix helper

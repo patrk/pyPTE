@@ -104,9 +104,10 @@ def global_coupling(m: int, strength: float = 6.0) -> npt.NDArray:
     """Mean-field coupling: every oscillator drives every other equally.
 
     The classic Kuramoto arrangement, normalised by m so the total drive per
-    oscillator does not grow with network size. It is symmetric, so it carries
-    no net direction anywhere and a directional measure should report nothing.
-    Included precisely because that is a useful negative control.
+    oscillator does not grow with network size. The coupling is symmetric, but
+    it is a negative control for a directional measure only with
+    ``freq_spread=0``: oscillators with different natural frequencies read as
+    directed even when they are coupled equally both ways.
     """
     coupling = np.full((m, m), strength / m)
     np.fill_diagonal(coupling, 0.0)
@@ -120,8 +121,8 @@ def local_coupling(
 
     With ``directed=True`` each oscillator drives only its clockwise
     neighbours, producing travelling activity with a definite direction. With
-    ``directed=False`` the coupling is symmetric, which synchronises locally
-    but again leaves no net direction to find.
+    ``directed=False`` the coupling is symmetric, which synchronises locally;
+    as with global coupling, detuned oscillators can still read as directed.
 
     Contrasting local with global coupling is the distinction the original
     examples drew: mean-field influence spread thinly over the whole network,
@@ -144,10 +145,10 @@ def two_groups(
 ) -> npt.NDArray:
     """Two symmetrically wired groups joined by one-way bridges from A to B.
 
-    Coupling inside each group is deliberately symmetric, so those pairs are
-    strongly coupled but carry no net direction. A directional measure should
-    therefore report nothing for them, which makes this topology a test of
-    whether pyPTE distinguishes direction from mere coupling.
+    Coupling inside each group is deliberately symmetric, so its pairs have no
+    direction in the ground truth. With the default frequency spread they still
+    read as directed, and the bridges' input spreads through each group, so
+    this topology tests how far direction can be told from coupling.
     """
     m = 2 * group_size
     coupling = np.zeros((m, m))

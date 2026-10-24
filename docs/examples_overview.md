@@ -14,7 +14,7 @@ uv run python -m examples.two_node_coupling      # add --quick for a faster run
 | example | what it establishes |
 |---|---|
 | [`two_node_coupling`](https://github.com/patrk/pyPTE/blob/main/examples/two_node_coupling.py) | direction is recovered; SNR asymmetry fakes it |
-| [`kuramoto_network`](https://github.com/patrk/pyPTE/blob/main/examples/kuramoto_network.py) | known directed graphs recovered, AUC 0.96–1.00 |
+| [`kuramoto_network`](https://github.com/patrk/pyPTE/blob/main/examples/kuramoto_network.py) | known directed graphs over 20 realisations: a ring at AUC 0.95, two synchronised groups at 0.84 ± 0.10 |
 | [`neural_mass_network`](https://github.com/patrk/pyPTE/blob/main/examples/neural_mass_network.py) | recording length, and why indirect paths come with the edges, on Jansen-Rit columns |
 | [`significance_testing`](https://github.com/patrk/pyPTE/blob/main/examples/significance_testing.py) | what a surrogate test does, drawn out |
 | [`epoched_analysis`](https://github.com/patrk/pyPTE/blob/main/examples/epoched_analysis.py) | full epoched two-condition pipeline |
