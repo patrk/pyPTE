@@ -15,8 +15,10 @@ appears:
 > **pyPTE recovers the direction of information flow between a pair of signals.
 > It does not recover the wiring diagram of a network.**
 
-Direction is reliable. Which connections are *direct* is not recoverable from a
-bivariate measure, and [what can fool it](https://patrk.github.io/pyPTE/guide/pitfalls.html)
+Direction is reliable once the data are band-passed to the rhythm and checked
+with time reversal, and the coupling lag is more than a small fraction of a
+cycle; [#85](https://github.com/patrk/pyPTE/issues/85) maps where it breaks.
+Which connections are *direct* is not recoverable from a bivariate measure, and [what can fool it](https://patrk.github.io/pyPTE/guide/pitfalls.html)
 shows exactly how that fails, with numbers. Every claim below is produced by a
 script in [`examples/`](examples/) that asserts its own result, so if something
 here stops being true, the test suite says so.
@@ -52,23 +54,33 @@ entry `[i, j]` describes flow from channel `i` to channel `j`.
 
 ```python
 import numpy as np
+from scipy.signal import butter, sosfiltfilt
 from pyPTE import PTE
 
 rng = np.random.default_rng(0)
-t = np.arange(8000) / 250.0
+fs, n, lag = 250, 30_000, 12  # two minutes; the target trails by 12 samples
 
-driver = np.sin(2 * np.pi * 10 * t) + 0.2 * rng.standard_normal(t.size)
-target = 0.9 * np.roll(driver, 12) + 0.4 * rng.standard_normal(t.size)
+# one 10 Hz rhythm with a drifting phase, seen by both channels with equal noise
+drift = np.cumsum(rng.normal(0, 0.025, n + lag))
+rhythm = np.sin(2 * np.pi * 10 * np.arange(n + lag) / fs + drift)
+driver = rhythm[lag:] + rng.standard_normal(n)
+target = rhythm[:n] + rng.standard_normal(n)
 
-dPTE, raw_PTE = PTE(np.vstack([driver, target]))
+# band-pass to the rhythm, and cancel what noise alone would make look directed
+alpha = butter(4, [8, 12], btype="band", fs=fs, output="sos")
+signal = sosfiltfilt(alpha, np.vstack([driver, target]))
+dPTE, raw_PTE = PTE(signal, time_reversal=True)
 
-print(dPTE[0, 1])  # ~0.80 -> driver leads target
-print(dPTE[1, 0])  # ~0.20 -> the reverse is suppressed
+print(dPTE[0, 1])  # ~0.63 -> driver leads target
+print(dPTE[1, 0])  # ~0.37 -> the reverse
 ```
 
 `raw_PTE` is transfer entropy in bits. `dPTE` is the direction-normalised form,
 where `dPTE[i, j] + dPTE[j, i] == 1`: above `0.5` means net flow from `i` to
-`j`, and exactly `0.5` means no preferred direction.
+`j`, and exactly `0.5` means no preferred direction. Two independent rhythms
+with the same noise give about 0.5. Without the band-pass, or with unequal
+noise and no `time_reversal`, dPTE can point from the cleaner channel to the
+noisier one whatever the coupling.
 
 **A raw `dPTE` value on its own is not a finding.** See
 [running a real analysis](https://patrk.github.io/pyPTE/guide/analysis.html).
