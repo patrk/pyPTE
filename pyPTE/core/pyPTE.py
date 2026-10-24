@@ -6,14 +6,18 @@ import numpy as np
 import numpy.typing as npt
 from scipy.signal import hilbert
 
-BinningRule = Literal["auto", "scott", "hillebrand"] | int
+BinningRule = Literal["auto", "scott", "hillebrand", "locking"] | int
 DelayRule = Literal["zero-crossing", "phase-increment"] | int
 
-# Below this many bins the direction dPTE reports for a real coupling depends
-# on the delay: in simulation it flips sign from one delay to the next while
-# independent channels stay at 0.5 (#99). 16 is where it settled there; #85
-# measures it properly.
-MIN_RELIABLE_BINS = 16
+# With too few bins the direction dPTE reports for a real coupling depends on
+# how far the phase advances over the delay, measured in bins, and can come
+# out significantly backwards (#99, #110). How many is enough grows as two
+# channels' phases lock more tightly: pi / sigma, with sigma the spread of their
+# phase difference, kept clean every simulated configuration. Below 16 it
+# failed even on loosely locked pairs; above 64 the estimate is pulled towards
+# 0.5 and power falls.
+LOCKING_MIN_BINS = 16
+LOCKING_MAX_BINS = 64
 
 
 def get_delay(phase: npt.NDArray[np.float64], rule: DelayRule = "zero-crossing") -> int:
@@ -441,7 +445,7 @@ def PTE(
     ----------
     time_series : numpy.ndarray
         m x n ndarray : m: number of channels, n: number of samples
-    binning : {"scott", "auto", "hillebrand"} or int
+    binning : {"scott", "locking", "auto", "hillebrand"} or int
         "scott", the default, sizes bins by Scott's rule. The fine bins keep
         the phase resolution dPTE depends on, and the estimator's bias cancels
         in the dPTE ratio. Raw PTE under it is biased upwards, by about 0.75
@@ -451,8 +455,12 @@ def PTE(
         phase and usually weakens dPTE. Use it when raw PTE in bits matters.
         "hillebrand" uses the bin count published in Hillebrand et al. 2016,
         which is finer still and, in simulation, more easily turned around by
-        a difference in signal-to-noise ratio. An integer sets the number of
-        bins directly.
+        a difference in signal-to-noise ratio. "locking" sizes bins for a
+        reliable direction (see locking_bincount): few for loosely locked
+        channels, which keeps power, and more for tightly locked ones, where
+        coarse bins can turn the direction around. An integer sets the number
+        of bins directly. Whatever the rule, a warning says when the bins are
+        too few for the direction to be trusted.
     delay : {"zero-crossing", "phase-increment"} or int
         passed to pyPTE.core.pyPTE.get_delay; an integer is used as-is
     bias_correction : bool
@@ -499,7 +507,7 @@ def PTE_segments(
     time_series: npt.ArrayLike,
     n_segments: int,
     *,
-    binning: BinningRule = "scott",
+    binning: BinningRule = "locking",
     delay: DelayRule = "zero-crossing",
     bias_correction: bool = False,
     trim_cycles: float = 0.0,
@@ -518,9 +526,10 @@ def PTE_segments(
 
     The phase is computed once over the whole recording, so the segments add
     no Hilbert edges, and every segment shares one delay and one bin count.
-    A data-dependent bin rule is sized for one segment, not for the whole
-    recording, which on short segments gives too few bins for a reliable
-    direction; ``binning=20`` is the safer choice. Segments of one recording
+    The default, ``binning="locking"``, keeps the direction reliable on
+    segments as short as 250 samples. Scott's rule is sized for one segment
+    and there gives too few bins, with the direction then following the delay
+    rather than the data. Segments of one recording
     share its slow drift, so they are not fully independent and the group
     test over them is somewhat optimistic.
 
@@ -533,7 +542,9 @@ def PTE_segments(
         smallest two-sided p-value over n segments is 2 / 2**n, so the count
         bounds what can survive correction; group_test warns when it is too
         small. Each segment should still span many cycles of the rhythm.
-    binning, delay, bias_correction, trim_cycles, time_reversal
+    binning
+        as for `PTE`, but "locking" by default
+    delay, bias_correction, trim_cycles, time_reversal
         as for `PTE`
 
     Returns
@@ -657,6 +668,47 @@ def reversal_differenced_dPTE(
     return differenced
 
 
+def locking_bincount(
+    phase: npt.NDArray[np.float64], channels_per_group: int | None = None
+) -> int:
+    """
+    Number of phase bins for a reliable direction, from how tightly channels lock
+
+    With coarse bins, dPTE for a coupled pair depends on how many bins the
+    phase advances over the delay, and can point the wrong way. Bins narrower
+    than the spread of the pair's phase difference avoid it: pi / sigma bins,
+    where sigma = sqrt(-2 ln PLV) is the circular spread of the phase
+    difference. Tightly locked pairs, clean or volume-conducted, need many
+    bins; loosely locked ones need few, and more would only cost power. The
+    most tightly locked pair sets the count, kept between 16 and 64.
+
+    Parameters
+    ----------
+    phase : numpy.ndarray
+        m x n array of phases in radians
+    channels_per_group : int, optional
+        when the rows are groups of this many channels, such as epochs
+        stacked one after another, only channels within a group are paired,
+        and each pair's locking is pooled over the groups
+
+    Returns
+    -------
+    n_bins : int
+    """
+    m, n = phase.shape
+    k = m if channels_per_group is None else channels_per_group
+    if k < 2:
+        return LOCKING_MIN_BINS
+    unit = np.exp(1j * phase).reshape(m // k, k, n)
+    plv = np.abs((unit @ unit.conj().transpose(0, 2, 1)).sum(axis=0))
+    plv /= unit.shape[0] * n
+    np.fill_diagonal(plv, 0.0)
+    # identical channels lock perfectly; capping keeps sigma finite, and the
+    # bin count is capped anyway. The floor only avoids log(0).
+    sigma = np.sqrt(-2 * np.log(np.clip(plv.max(), 1e-12, 0.9999)))
+    return int(np.clip(np.ceil(np.pi / sigma), LOCKING_MIN_BINS, LOCKING_MAX_BINS))
+
+
 def prepare_phase(
     time_series: npt.ArrayLike,
     *,
@@ -664,6 +716,7 @@ def prepare_phase(
     delay: DelayRule = "zero-crossing",
     trim_cycles: float = 0.0,
     n_segments: int = 1,
+    channels_per_group: int | None = None,
 ) -> tuple[npt.NDArray[np.int32], int, int]:
     """
     Turns raw signals into the binned phase that PTE counts
@@ -683,6 +736,8 @@ def prepare_phase(
         segment rather than for the whole recording; bins sized for the whole
         recording leave a short segment's joint histograms nearly empty, which
         pulls its dPTE towards 0.5.
+    channels_per_group : int, optional
+        passed to locking_bincount, for rows that stack several epochs
 
     Returns
     -------
@@ -729,27 +784,27 @@ def prepare_phase(
     elif binning == "hillebrand":
         n_bins = get_bincount_hillebrand(n_samples, analysis_delay)
         binsize = 2 * np.pi / n_bins
-    else:
+    elif binning != "locking":
         raise ValueError(f"unknown binning rule {binning!r}")
 
-    if n_bins < MIN_RELIABLE_BINS:
-        _warn_few_bins(n_bins, n_samples, binning)
+    needed = locking_bincount(phase, channels_per_group)
+    if binning == "locking":
+        n_bins = needed
+        binsize = 2 * np.pi / n_bins
+    elif n_bins < needed:
+        _warn_few_bins(n_bins, needed)
 
     d_phase = get_discretized_phase(phase_inc, binsize, n_bins=n_bins)
     return d_phase, analysis_delay, n_bins
 
 
-def _warn_few_bins(n_bins: int, n_samples: int, binning: BinningRule) -> None:
-    advice = f"set binning to {MIN_RELIABLE_BINS} or more"
-    if binning == "scott":
-        # Scott's bin count grows as the cube root of the sample count
-        needed = int(np.ceil(n_samples * (MIN_RELIABLE_BINS / n_bins) ** 3))
-        advice = f"analyse windows of at least {needed} samples, or " + advice
+def _warn_few_bins(n_bins: int, needed: int) -> None:
     warnings.warn(
-        f"{n_bins} phase bins: with fewer than {MIN_RELIABLE_BINS}, the "
-        "direction dPTE reports for a real coupling can depend on the delay, "
-        f"even flipping sign; significance against chance is unaffected. To "
-        f"rely on the direction, {advice}.",
+        f"{n_bins} phase bins, but these channels lock tightly enough to need "
+        f"{needed}: with fewer, the direction dPTE reports for a real coupling "
+        "can depend on the delay, even coming out significantly backwards; "
+        "significance against chance is unaffected. To rely on the direction, "
+        'set binning="locking".',
         RuntimeWarning,
         stacklevel=3,
     )

@@ -79,9 +79,9 @@ one-hop links exist:
 
 | separation | mean dPTE | real edge? |
 |---|---:|---|
-| 1 hop | 0.582 | **yes** |
-| 2 hops | 0.634 | no |
-| 3 hops | **0.702** | no |
+| 1 hop | 0.576 | **yes** |
+| 2 hops | 0.625 | no |
+| 3 hops | **0.659** | no |
 
 dPTE rises with path length, so ranking pairs by it returns close to the inverse
 of the true network. pyPTE recovers the flow, not the wiring.

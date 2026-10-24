@@ -121,7 +121,7 @@ def PTE_from_epochs(
     epochs: "BaseEpochs",
     picks: str | Sequence[str | int] | slice | None = None,
     *,
-    binning: BinningRule = "scott",
+    binning: BinningRule = "locking",
     delay: DelayRule = "zero-crossing",
     trim_cycles: float = 0.0,
     time_reversal: bool = False,
@@ -141,7 +141,11 @@ def PTE_from_epochs(
     picks : str | list | slice | None
         channels to analyse, accepting anything mne.Epochs.pick() accepts; by
         default every channel
-    binning, delay, trim_cycles
+    binning
+        as for pyPTE.PTE, but "locking" by default, with each pair's locking
+        pooled over the epochs. Scott's rule is sized for one epoch and gives
+        too few bins for a reliable direction on short ones
+    delay, trim_cycles
         as for pyPTE.PTE, applied to every epoch with shared settings
     time_reversal : bool
         return the time-reversal-differenced dPTE of each epoch, as for
@@ -170,6 +174,7 @@ def PTE_from_epochs(
         binning=binning,
         delay=delay,
         trim_cycles=trim_cycles,
+        channels_per_group=m,
     )
     return pyPTE.compute_segments(
         list(d_phase.reshape(n_epochs, m, -1)),

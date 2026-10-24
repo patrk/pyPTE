@@ -286,7 +286,9 @@ def test_epochs_share_one_delay_and_bin_count():
 
     epochs = make_epochs(n_epochs=6)
     data = epochs.get_data()
-    stacked, delay, n_bins = prepare_phase(data.reshape(-1, data.shape[2]))
+    stacked, delay, n_bins = prepare_phase(
+        data.reshape(-1, data.shape[2]), binning="locking", channels_per_group=3
+    )
     first, _ = compute_dPTE_rawPTE(stacked[:3], delay, n_bins=n_bins)
 
     dPTE, _ = PTE_from_epochs(epochs)
@@ -317,7 +319,9 @@ def test_epochs_can_be_time_reversal_differenced():
 
     np.testing.assert_array_equal(raw, plain_raw)
     data = epochs.get_data()
-    stacked, delay, n_bins = prepare_phase(data.reshape(-1, data.shape[2]))
+    stacked, delay, n_bins = prepare_phase(
+        data.reshape(-1, data.shape[2]), binning="locking", channels_per_group=3
+    )
     first = stacked[:3]
     forward, _ = compute_dPTE_rawPTE(first, delay, n_bins=n_bins)
     backward, _ = compute_dPTE_rawPTE(reverse_phase(first), delay, n_bins=n_bins)

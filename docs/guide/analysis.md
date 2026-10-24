@@ -26,12 +26,17 @@ rely on, use the time-reversal check below.
 ```
 
 ```{warning}
-**Use enough bins.** With fewer than about 16 phase bins, the direction dPTE
-reports for a real coupling depends on the delay: in simulation it flips sign
-from one delay to the next, while independent channels stay at 0.5
-([#99](https://github.com/patrk/pyPTE/issues/99)). Scott's rule, the default,
-gives that few on short windows, about 7 at 250 samples, so `PTE` warns when
-it happens. Analyse longer windows or set `binning=20`.
+**Use enough bins.** With too few phase bins, the direction dPTE reports for
+a real coupling depends on how many bins the phase advances over the delay,
+and can come out significantly backwards
+([#99](https://github.com/patrk/pyPTE/issues/99),
+[#110](https://github.com/patrk/pyPTE/issues/110)). How many is enough
+depends on how tightly the two channels' phases lock: π / σ, where σ is the
+spread of their phase difference. Loosely locked pairs need about 16; very
+clean, tightly locked ones up to 64, and no fixed count is safe for both.
+`binning="locking"` chooses that count from the data, and every rule warns
+when it gives fewer. `PTE_segments` and `PTE_from_epochs` use it by default;
+`PTE` keeps Scott's rule.
 ```
 
 Which test depends on the shape of your data.
@@ -107,7 +112,7 @@ result.reversal_confirmed  # significant both ways round, with opposite signs
 # more power: segments or epochs, differenced, tested for consistency
 from pyPTE import PTE_segments
 
-dPTE, _ = PTE_segments(signal, 10, binning=20, time_reversal=True)
+dPTE, _ = PTE_segments(signal, 10, time_reversal=True)
 group_test(dPTE).significant
 ```
 
@@ -121,26 +126,30 @@ reports `differenced_dPTE` only as an effect size.
 
 How the three compare on simulated 10 Hz recordings of 120 s each, band-passed
 to 8–12 Hz, with the coupling 12 samples long, close to the estimated delay
-(20 recordings per cell; the segment test's false positives also over 40 more):
+(20 recordings per cell; the segment test's false positives over 60):
 
 | | false direction, mixing | noisy driver found | twice as noisy found | equal noise found |
 |---|---|---|---|---|
-| `surrogate_test`, plain `significant` | 17/20 | 9/20 | 0/20 (12/20 backwards) | 20/20 |
-| `reversal_confirmed` | 0/20 | 9/20 | 0/20 | 20/20 |
-| `PTE_segments` + `group_test`, 10 × 12 s, 20 bins | 0/20 (0/40) | 17/20 | 8/20 | 20/20 |
+| `surrogate_test`, plain `significant` | 19/20 | 15/20 | 0/20 (13/20 backwards) | 20/20 |
+| `reversal_confirmed` | 0/20 | 15/20 | 0/20 | 20/20 |
+| `PTE_segments` + `group_test`, 10 × 12 s | 1/60 | 18/20 | 6/20 | 20/20 |
 
-With Scott's rule those segments get 15 bins, and the segment test then called
+The noise levels are broadband standard deviations of 1.0 for the noisy
+driver, 2.0 for twice as noisy, 0.1 for the clean target and 0.3 for equal
+noise; after the 8–12 Hz filter, 0.3 leaves an in-band signal-to-noise ratio
+of about 190, far cleaner than real recordings. At equal noise of 1.0, an
+in-band ratio of about 17, the segment test finds the coupling in 6 of 20.
+With Scott's rule the segments get 15 bins, and the segment test then called
 the equal-noise coupling significant *backwards* in 8 recordings out of 20.
-Shorter couplings are much harder: at 5 samples, dPTE barely moves off 0.5 in
-any of these settings. Where PTE's direction is reliable is being mapped in
+Where PTE's direction is reliable is mapped in
 [#85](https://github.com/patrk/pyPTE/issues/85).
 
 - **Enough segments.** Wilcoxon over n segments cannot give a p-value below
   2 / 2ⁿ, and Benjamini-Hochberg over P pairs needs α / P, so n must be at
   least log₂(2P / α): 6 for two channels, 11 for ten, 17 for 64. `group_test`
   warns when it cannot reach significance.
-- **Enough bins per segment.** Set `binning=20` rather than relying on Scott's
-  rule, which sizes bins for one segment and gives too few on short ones.
+- **Enough bins per segment.** Keep the default `binning="locking"`. Scott's
+  rule sizes bins for one segment and gives too few on short ones.
 - **Independent segments.** Segments cut from one recording share its slow
   drift, so they are not fully independent and the test is somewhat
   optimistic. Separate trials or recordings do not have that problem.
@@ -163,7 +172,7 @@ between conditions. Three settings decide whether the answer can be trusted.
 from pyPTE import group_test
 from pyPTE.adapters.mne_adapter import PTE_from_epochs
 
-dPTE, _ = PTE_from_epochs(epochs, picks="eeg", binning=20, time_reversal=True)
+dPTE, _ = PTE_from_epochs(epochs, picks="eeg", time_reversal=True)
 group_test(dPTE)  # (n_epochs, m, m) in, one test per pair
 ```
 
@@ -173,20 +182,22 @@ group_test(dPTE)  # (n_epochs, m, m) in, one test per pair
   over 1 s epochs reported mixing as a significant direction in 8 to 10 runs
   out of 10, and paired a white-noise channel with rhythmic ones in 8 of 8.
   Time reversal cancels both.
-- **`binning=20`, not Scott's rule.** Scott's rule sizes bins for one epoch and
-  gives about 7 on a 1 s epoch, where the direction follows the delay rather
-  than the data. With the default, 1 s epochs reported a real coupling as
-  significantly *backwards* in 8 to 10 runs out of 10.
+- **The default bins, not Scott's rule.** Scott's rule sizes bins for one
+  epoch and gives about 7 on a 1 s epoch, where the direction follows the
+  delay rather than the data: 240 one-second epochs reported the coupling
+  below as significantly *backwards* in 20 runs out of 20. The default,
+  `binning="locking"`, pools each pair's phase locking over the epochs.
 - **Long epochs, or many.** Short epochs carry little directional information.
-  Simulated coupling of 12 samples at 250 Hz with matched noise, 8–12 Hz,
-  `binning=20`, `time_reversal=True`, 10 runs each:
+  Simulated coupling of 12 samples at 250 Hz with equal noise of 1.0 (in-band
+  signal-to-noise ratio about 17), 8–12 Hz, `time_reversal=True`, 20 runs
+  each:
 
   | epochs | found the right way | wrong way |
   |---|---|---|
-  | 60 × 1 s | 0 | 0 |
+  | 60 × 1 s | 1 | 0 |
   | 240 × 1 s | 6 | 0 |
-  | 60 × 4 s | 6 | 0 |
-  | 30 × 8 s | 8 | 0 |
+  | 60 × 4 s | 18 | 0 |
+  | 30 × 8 s | 18 | 0 |
 
 `PTE_from_epochs` estimates the delay and bins once over all epochs, so every
 matrix is computed the same way. Band-pass the continuous recording before

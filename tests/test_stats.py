@@ -305,7 +305,7 @@ def test_minimum_surrogate_count_detects_strong_coupling():
     n = surrogates_needed(2)
     with warnings.catch_warnings():
         warnings.simplefilter("error", RuntimeWarning)
-        result = surrogate_test(coupled_pair(), n_surrogates=n, seed=0)
+        result = surrogate_test(coupled_pair(), n_surrogates=n, seed=0, binning=50)
     assert result.significant[0, 1] and result.significant[1, 0]
 
 

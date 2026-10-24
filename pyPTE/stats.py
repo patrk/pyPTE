@@ -785,7 +785,7 @@ def group_test(
     the same way in every observation, so plain dPTE matrices test for those
     as readily as for coupling. Pass time-reversal-differenced matrices
     (``time_reversal=True`` in `PTE_segments` or ``PTE_from_epochs``), and
-    compute them with at least 16 bins, preferably 20: with fewer, a real
+    keep their default ``binning="locking"``: with too few bins a real
     coupling's direction depends on the delay and can come out significantly
     backwards. Short observations carry little directional information, so
     the estimate in each one is pulled towards 0.5 rather than merely noisy.
