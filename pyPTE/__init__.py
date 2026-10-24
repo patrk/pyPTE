@@ -11,7 +11,7 @@ from pyPTE.stats import (
     surrogates_needed,
 )
 
-__version__ = "1.13.0"
+__version__ = "1.14.0"
 
 __all__ = [
     "PTE",
