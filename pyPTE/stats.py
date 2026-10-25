@@ -75,8 +75,9 @@ class SignificanceResult:
         m x m boolean mask of pairs surviving multiple-comparison correction.
         It marks a pair in both orientations, since ``dPTE[j, i]`` is
         ``1 - dPTE[i, j]`` and the test is the same; which way the pair points
-        is the side of 0.5 dPTE falls on. Use ``directed`` to score against a
-        directed ground truth, or each real edge also counts as a false one.
+        is the side of ``centre`` dPTE falls on. Use ``directed`` to score
+        against a directed ground truth, or each real edge also counts as a
+        false one.
     threshold : float
         largest p-value called significant, or 0.0 if nothing survived
     null_mean : numpy.ndarray
@@ -110,6 +111,10 @@ class SignificanceResult:
         null assumes independent channels, which mixing violates, so to test
         it, compute it per segment or epoch (`PTE_segments`, or
         ``PTE_from_epochs(time_reversal=True)``) and use `group_test`.
+    centre : numpy.ndarray | float
+        what the test measured distance from: 0.5, or with
+        ``centre_on_null=True`` the m x m median of each pair's surrogate null.
+        A pair points from i to j when ``dPTE[i, j]`` is above it.
     """
 
     dPTE: npt.NDArray[np.float64]
@@ -126,6 +131,7 @@ class SignificanceResult:
     reversed_p_values: npt.NDArray[np.float64] | None = None
     reversal_confirmed: npt.NDArray[np.bool_] | None = None
     differenced_dPTE: npt.NDArray[np.float64] | None = None
+    centre: npt.NDArray[np.float64] | float = 0.5
 
     @property
     def n_significant(self) -> int:
@@ -134,7 +140,7 @@ class SignificanceResult:
     @property
     def directed(self) -> npt.NDArray[np.bool_]:
         """m x m mask of significant pairs, at [driver, target] only."""
-        return self.significant & (self.dPTE > 0.5)
+        return self.significant & (self.dPTE > self.centre)
 
     def summary(self) -> str:
         m = self.dPTE.shape[0]
@@ -412,6 +418,8 @@ class _ShiftTest(NamedTuple):
     null_distribution: npt.NDArray[np.float64] | None
     reversed_dPTE: npt.NDArray[np.float64] | None = None
     reversed_p_values: npt.NDArray[np.float64] | None = None
+    centre: npt.NDArray[np.float64] | float = 0.5
+    reversed_centre: npt.NDArray[np.float64] | float = 0.5
 
 
 def _p_values(
@@ -436,6 +444,25 @@ def _count_extreme(
     return extreme
 
 
+def _centred_count(
+    null: npt.NDArray[np.float64], observed: npt.NDArray[np.float64]
+) -> tuple[npt.NDArray[np.int_], npt.NDArray[np.float64]]:
+    """Count surrogates as far from the null median as the observation.
+
+    Returns the counts and the per-pair median. dPTE[j, i] is 1 - dPTE[i, j]
+    in every surrogate too, so the medians mirror and a pair keeps one test.
+    """
+    with warnings.catch_warnings():
+        # a pair whose every surrogate is undefined has no median
+        warnings.simplefilter("ignore", RuntimeWarning)
+        centre = np.nanmedian(null, axis=0)
+    centre[np.isnan(centre)] = 0.5
+    np.fill_diagonal(centre, 0.5)
+    effect = np.abs(null - centre)
+    extreme = (effect >= np.abs(observed - centre)) | np.isnan(effect)
+    return extreme.sum(axis=0), centre
+
+
 def _shift_test(
     d_phase: npt.NDArray[np.int32],
     analysis_delay: int,
@@ -445,11 +472,14 @@ def _shift_test(
     keep_null: bool,
     progress: bool,
     reverse: bool = False,
+    centre_on_null: bool = False,
 ) -> _ShiftTest:
     """Observed dPTE and its p-values against the surrogates given by shifts.
 
     With reverse, also the dPTE of the time-reversed recording, tested
-    against the reverse of the same surrogates.
+    against the reverse of the same surrogates. With centre_on_null, distance
+    is measured from each pair's null median rather than 0.5, which needs the
+    whole null in memory before anything can be counted.
     """
     n_surrogates = len(shifts)
     dPTE, raw_PTE = compute_dPTE_rawPTE(d_phase, analysis_delay, n_bins=n_bins)
@@ -467,7 +497,14 @@ def _shift_test(
     null_total = np.zeros_like(dPTE, dtype=float)
     raw_null_total = np.zeros_like(raw_PTE, dtype=float)
     null_distribution = (
-        np.empty((n_surrogates, *dPTE.shape), dtype=float) if keep_null else None
+        np.empty((n_surrogates, *dPTE.shape), dtype=float)
+        if keep_null or centre_on_null
+        else None
+    )
+    reversed_null = (
+        np.empty((n_surrogates, *dPTE.shape), dtype=float)
+        if reverse and centre_on_null
+        else None
     )
 
     def blocks() -> Iterator[_Block]:
@@ -501,12 +538,25 @@ def _shift_test(
                 reversed_extreme += _count_extreme(
                     reversed_block[row], np.abs(reversed_dPTE - 0.5)
                 )
+                if reversed_null is not None:
+                    reversed_null[index] = reversed_block[row]
             null_total += surrogate_dPTE
             if null_distribution is not None:
                 null_distribution[index] = surrogate_dPTE
             index += 1
             if progress and index % 25 == 0:
                 print(f"  surrogate {index}/{n_surrogates}")
+
+    centre: npt.NDArray[np.float64] | float = 0.5
+    reversed_centre: npt.NDArray[np.float64] | float = 0.5
+    if centre_on_null:
+        assert null_distribution is not None
+        at_least_as_extreme, centre = _centred_count(null_distribution, dPTE)
+        if reversed_null is not None:
+            assert reversed_dPTE is not None
+            reversed_extreme, reversed_centre = _centred_count(
+                reversed_null, reversed_dPTE
+            )
 
     reversed_p = None
     if reversed_dPTE is not None:
@@ -520,9 +570,11 @@ def _shift_test(
         _p_values(at_least_as_extreme, n_surrogates, undefined),
         null_total / n_surrogates,
         raw_null_total / n_surrogates,
-        null_distribution,
+        null_distribution if keep_null else None,
         reversed_dPTE,
         reversed_p,
+        centre,
+        reversed_centre,
     )
 
 
@@ -539,6 +591,7 @@ def surrogate_test(
     trim_cycles: float = 0.0,
     n_jobs: int = 1,
     time_reversal: bool = False,
+    centre_on_null: bool = False,
 ) -> SignificanceResult:
     """Test every directed channel pair against a time-shifted surrogate null.
 
@@ -588,6 +641,20 @@ def surrogate_test(
         ``differenced_dPTE`` comes back too, as an effect size. It doubles the
         run time, and it cannot catch a common driver that reaches the two
         channels at different lags, since that order is genuinely in the data.
+    centre_on_null : bool
+        measure each pair's distance from the median of its own surrogate
+        null instead of from 0.5, and read its direction from that side too
+        (``result.centre``). A difference in signal-to-noise ratio shifts the
+        whole null away from 0.5; when it opposes a real coupling, the plain
+        test can lose the coupling or call it the wrong way, and centring
+        recovers much of it. It does not lower the false-positive rate on
+        independent channels, and when the noisier channel is the driver and
+        its signal-to-noise ratio is low, the direction can still come out
+        wrong: coupled channels show more of the artefact than their shifted
+        surrogates do. Combined with ``time_reversal=True``, read
+        ``reversal_confirmed``, which removes those wrong directions in
+        simulation. It holds every surrogate matrix in memory, as
+        ``keep_null`` does.
 
     Returns
     -------
@@ -622,6 +689,7 @@ def surrogate_test(
         keep_null,
         progress,
         reverse=time_reversal,
+        centre_on_null=centre_on_null,
     )
 
     # zero transfer in both directions, e.g. a duplicated or flat channel,
@@ -649,7 +717,9 @@ def surrogate_test(
         reversed_significant, _ = _correct_off_diagonal(
             forward.reversed_p_values, alpha
         )
-        flips = np.sign(forward.dPTE - 0.5) == -np.sign(forward.reversed_dPTE - 0.5)
+        flips = np.sign(forward.dPTE - forward.centre) == -np.sign(
+            forward.reversed_dPTE - forward.reversed_centre
+        )
         reversal_confirmed = significant & reversed_significant & flips
         differenced_dPTE = reversal_differenced_dPTE(
             forward.dPTE, forward.reversed_dPTE
@@ -670,6 +740,7 @@ def surrogate_test(
         reversed_p_values=forward.reversed_p_values,
         reversal_confirmed=reversal_confirmed,
         differenced_dPTE=differenced_dPTE,
+        centre=forward.centre,
     )
 
 

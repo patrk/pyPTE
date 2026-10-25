@@ -163,6 +163,43 @@ Where PTE's direction is reliable is mapped in
 - **Common drivers.** Neither check catches a common driver that reaches the
   two channels at different lags: that order really is in the data.
 
+### When the noise moves the null: centring
+
+A difference in signal-to-noise ratio moves the whole surrogate null away
+from 0.5, because each surrogate keeps each channel's noise. The plain test
+measures distance from 0.5, so when that shift opposes a real coupling it can
+lose the coupling, and `reversal_confirmed`, built on the same test, loses it
+too. `centre_on_null=True` measures each pair's distance from the median of
+its own null instead, and reads direction from that side
+(`result.centre`):
+
+```python
+result = surrogate_test(
+    signal, n_surrogates=200, seed=0, centre_on_null=True, time_reversal=True
+)
+result.reversal_confirmed
+```
+
+Simulated as above, the noisier channel driving, 40 recordings per row
+(found the right way / the wrong way):
+
+| driver | plain `significant` | centred | `reversal_confirmed` | centred + reversal | `PTE_segments` + `group_test` |
+|---|---|---|---|---|---|
+| in-band SNR 8, 4× noisier | 1/1 | 25/1 | 1/0 | 25/0 | 28/0 |
+| SNR 12.5, 8× noisier | 23/0 | 38/0 | 23/0 | 38/0 | 38/0 |
+| SNR 8, 4× noisier, 240 s | 0/0 | 40/0 | 0/0 | 40/0 | 37/0 |
+| SNR 4, 4× noisier | 0/18 | 6/14 | 0/0 | 6/0 | 11/0 |
+
+Centring restores the power but not the direction: at low SNR the coupled
+channels show more of the artefact than their shifted surrogates do, and the
+centred test still calls it backwards. Combined with time reversal it called
+nothing the wrong way here, and on independent channels with the same noise
+gap it called nothing at all, against 3 to 6 of 40 for the plain or centred
+test alone. So on one continuous recording use both, and read
+`reversal_confirmed`; the segment test is the alternative when the recording
+is long enough to cut. Centring holds every surrogate matrix in memory, as
+`keep_null=True` does. It is off by default for now.
+
 ## Epochs, trials or subjects
 
 When the data come as repeated observations, `group_test` asks whether a

@@ -153,7 +153,7 @@ teaching.null_densities(results, ["$X$ drives $Y$", "Independent, $Y$ much noisi
 
 # %%
 # 5. Epochs: compare conditions, not 0.5
-# -------------------------------------
+# --------------------------------------
 # Each dot is one 12 s epoch. Coupled epochs sit above 0.5 every time, a
 # consistency :func:`pyPTE.group_test` tests for. The noisy-Y condition sits
 # higher still with no coupling at all, which is why conditions are compared
