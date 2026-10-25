@@ -539,3 +539,76 @@ def test_parallel_time_reversal_matches_serial():
     np.testing.assert_array_equal(
         parallel.reversal_confirmed, serial.reversal_confirmed
     )
+
+
+# --------------------------------------------------------------------------
+# centring on the null
+# --------------------------------------------------------------------------
+
+
+def snr_opposed_pair(seed=0):
+    # channel 0 drives, but is four times noisier: the gap pulls the whole
+    # null below 0.5, past the observed value, so the plain test sees nothing
+    rng = np.random.default_rng(seed)
+    return band_pass(coupled(rng, 60000, driver_noise=1.4, target_noise=0.35))
+
+
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_centring_on_the_null_recovers_a_coupling_an_snr_gap_hides(seed):
+    data = snr_opposed_pair(seed)
+    plain = surrogate_test(data, n_surrogates=99, seed=0)
+    centred = surrogate_test(data, n_surrogates=99, seed=0, centre_on_null=True)
+    assert not plain.significant.any()
+    assert centred.directed[0, 1] and not centred.directed[1, 0]
+
+
+def test_centre_mirrors_so_each_pair_is_tested_once():
+    data = np.vstack([snr_opposed_pair(), independent_pair(n=60000)])
+    result = surrogate_test(data, n_surrogates=199, seed=0, centre_on_null=True)
+    assert isinstance(result.centre, np.ndarray)
+    assert result.directed[0, 1]
+    off = ~np.eye(4, dtype=bool)
+    np.testing.assert_allclose((result.centre + result.centre.T)[off], 1.0)
+    np.testing.assert_array_equal(np.diag(result.centre), 0.5)
+    np.testing.assert_array_equal(result.p_values, result.p_values.T)
+    np.testing.assert_array_equal(result.directed & result.directed.T, False)
+
+
+def test_centring_is_opt_in_and_does_not_keep_the_null():
+    data = snr_opposed_pair()
+    plain = surrogate_test(data, n_surrogates=19, seed=0)
+    centred = surrogate_test(data, n_surrogates=19, seed=0, centre_on_null=True)
+    assert plain.centre == 0.5
+    assert centred.null_distribution is None
+
+
+def test_centred_null_is_the_median_of_the_kept_null():
+    result = surrogate_test(
+        snr_opposed_pair(), n_surrogates=19, seed=0, centre_on_null=True, keep_null=True
+    )
+    assert result.null_distribution is not None
+    assert isinstance(result.centre, np.ndarray)
+    centre = np.median(result.null_distribution, axis=0)
+    np.testing.assert_allclose(result.centre[0, 1], centre[0, 1])
+    extreme = np.abs(result.null_distribution[:, 0, 1] - centre[0, 1]) >= abs(
+        result.dPTE[0, 1] - centre[0, 1]
+    )
+    assert result.p_values[0, 1] == (extreme.sum() + 1) / 20
+
+
+def test_centring_does_not_call_independent_channels_with_an_snr_gap():
+    data = band_pass(independent_pair(n=60000, noise_ratio=4.0))
+    result = surrogate_test(data, n_surrogates=99, seed=0, centre_on_null=True)
+    assert not result.significant.any()
+
+
+def test_centred_time_reversal_confirms_the_recovered_coupling():
+    result = surrogate_test(
+        snr_opposed_pair(),
+        n_surrogates=99,
+        seed=0,
+        centre_on_null=True,
+        time_reversal=True,
+    )
+    assert result.reversal_confirmed is not None
+    assert result.reversal_confirmed[0, 1]
