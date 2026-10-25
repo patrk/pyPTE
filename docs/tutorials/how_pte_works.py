@@ -152,12 +152,17 @@ results = [
 teaching.null_densities(results, ["$X$ drives $Y$", "Independent, $Y$ much noisier"])
 
 # %%
-# 5. Many short recordings beat one long one
-# ------------------------------------------
-# Each dot is one 12 s epoch. Coupled epochs sit above 0.5 almost every time,
-# a consistency that :func:`pyPTE.group_test` detects easily. The noisy-Y
-# condition sits higher still with no coupling at all, which is why
-# conditions are compared with each other rather than with 0.5.
+# 5. Epochs: compare conditions, not 0.5
+# -------------------------------------
+# Each dot is one 12 s epoch. Coupled epochs sit above 0.5 every time, a
+# consistency :func:`pyPTE.group_test` tests for. The noisy-Y condition sits
+# higher still with no coupling at all, which is why conditions are compared
+# with each other rather than with 0.5.
+#
+# Cutting a recording into epochs does not buy power. With the same total
+# data, epochs tested with :func:`pyPTE.group_test` and one continuous
+# recording tested against surrogates find a weak coupling about equally
+# often; use whichever matches how the data were recorded.
 
 
 def epoch_dpte(coupling, noise_y, seed):
@@ -185,8 +190,9 @@ ax.set_ylabel("dPTE per 12 s epoch")
 # ----------------------------------------------------------
 # Eight oscillators in a ring, each driving the next (**a**). Only edges
 # surviving the surrogate test with false-discovery-rate control are drawn in
-# **b**, width by dPTE − 0.5. Direction is right on every arrow, but some
-# arrows skip a node: information really does flow that way, through an
+# **b**, width by dPTE − 0.5. Arrows point the right way, though over many
+# realisations about one in a hundred does not, and some arrows skip a node:
+# information really does flow that way, through an
 # intermediate, and a pairwise measure cannot tell a direct connection from an
 # indirect one.
 #
