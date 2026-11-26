@@ -2,15 +2,18 @@
 
 Reporting raw `dPTE` values is the single most common way to get a wrong answer
 out of this library. Two independent signals that merely differ in
-signal-to-noise ratio produce `dPTE` around `0.73` — indistinguishable from
-genuine coupling. The value has to be tested against a null.
+signal-to-noise ratio produce `dPTE` around `0.73` on broadband data with a
+four-fold noise gap — indistinguishable from genuine coupling. The value has
+to be tested against a null.
 
 ```{warning}
 **Band-pass to the rhythm of interest first, and narrowly.** On broadband
 data dPTE points from the cleaner channel to the noisier one, whatever the
 coupling ([#97](https://github.com/patrk/pyPTE/issues/97)). In simulation, a
 noisy 10 Hz driver coupled to a clean target, 12 samples later at 250 Hz,
-comes out the right way round this often (12 recordings of 32 s each):
+comes out the right way round this often (12 recordings of 32 s each; after
+the 8–12 Hz filter the driver's in-band signal-to-noise ratio is about 17, or
+4 when twice as noisy, and the target's about 1,700):
 
 | preprocessing | right way round |
 |---|---|
@@ -37,6 +40,13 @@ clean, tightly locked ones up to 64, and no fixed count is safe for both.
 `binning="locking"` chooses that count from the data, and every rule warns
 when it gives fewer. `PTE_segments` and `PTE_from_epochs` use it by default;
 `PTE` keeps Scott's rule.
+
+Time reversal does not fix this. Coarse bins alias the delay into a
+direction, and that direction reverses with time just as a real one does, so
+it survives the differencing. Time reversal handles a gap in signal-to-noise
+ratio, instantaneous mixing and mixed phase (see
+[what can fool it](pitfalls.md)); the bin count handles aliasing. You need
+both.
 ```
 
 Which test depends on the shape of your data.
@@ -125,23 +135,42 @@ The surrogate test is not: its null assumes independent channels, so under
 mixing it calls random differenced values significant. `surrogate_test`
 reports `differenced_dPTE` only as an effect size.
 
-How the three compare on simulated 10 Hz recordings of 120 s each, band-passed
-to 8–12 Hz, with the coupling 12 samples long, close to the estimated delay
-(20 recordings per cell; the segment test's false positives over 60):
+How they compare on simulated 10 Hz recordings of 120 s each, band-passed to
+8–12 Hz, with the coupling 12 samples long, close to the estimated delay. Each
+cell counts 40 recordings, found the right way / the wrong way; in the first
+two rows there is no coupling, so every call is wrong. "SNR" is the in-band
+signal-to-noise ratio after the filter, as power.
 
-| | false direction, mixing | noisy driver found | twice as noisy found | equal noise found |
+| recording | plain `significant` | `reversal_confirmed` | centred + reversal | `PTE_segments` + `group_test`, 10 × 12 s |
 |---|---|---|---|---|
-| `surrogate_test`, plain `significant` | 19/20 | 15/20 | 0/20 (13/20 backwards) | 20/20 |
-| `reversal_confirmed` | 0/20 | 15/20 | 0/20 | 20/20 |
-| `PTE_segments` + `group_test`, 10 × 12 s | 1/60 | 18/20 | 6/20 | 20/20 |
+| no coupling, one source mixed into both, SNR 17 and 3 | 34 | 0 | 0 | 1 |
+| no coupling, independent, SNR 17 and 4 | 6 | 0 | 0 | 1 |
+| equal SNR 17 | 39/0 | 37/0 | 38/0 | 23/0 |
+| equal SNR 4 | 12/6 | 2/0 | 5/0 | 4/0 |
+| driver SNR 4, target 17 | 0/15 | 0/0 | 6/0 | 5/0 |
+| driver SNR 17, target 4 | 38/0 | 0/0 | 9/0 | 3/0 |
 
-The noise levels are broadband standard deviations of 1.0 for the noisy
-driver, 2.0 for twice as noisy, 0.1 for the clean target and 0.3 for equal
-noise; after the 8–12 Hz filter, 0.3 leaves an in-band signal-to-noise ratio
-of about 190, far cleaner than real recordings. At equal noise of 1.0, an
-in-band ratio of about 17, the segment test finds the coupling in 6 of 20.
-With Scott's rule the segments get 15 bins, and the segment test then called
-the equal-noise coupling significant *backwards* in 8 recordings out of 20.
+What it shows:
+
+- **Time reversal is what removes false directions.** Every method that uses
+  it called at most one uncoupled pair in 40, and none a coupling backwards.
+- **Plain `significant` is right only when the noise happens to agree with
+  the coupling.** Its 38 in the last row is the noise gap pointing the right
+  way by luck; the same gap called 15 couplings backwards when reversed, and 6
+  uncoupled pairs directed.
+- **`reversal_confirmed` confirms; it does not detect.** It needs the pair
+  significant in both time directions, so when it calls a direction it is
+  very rarely wrong (5 wrong calls in 12,150 across the simulations
+  summarised in [#109](https://github.com/patrk/pyPTE/issues/109)), but its power is set
+  by the noisier channel's absolute SNR and the recording length: with either
+  channel at SNR 4 it found almost nothing. Centring (below) restores part of
+  that.
+- **The segment test is weakest at equal SNR** (23 of 40 against 37–39) and
+  about level with centred + reversal under an SNR gap.
+- **Power falls steeply with SNR.** At an in-band SNR of about 190, as in
+  earlier versions of this table, every method found the equal-noise
+  coupling in 20 recordings of 20.
+
 Where PTE's direction is reliable is mapped in
 [#85](https://github.com/patrk/pyPTE/issues/85).
 
@@ -150,7 +179,13 @@ Where PTE's direction is reliable is mapped in
   least log₂(2P / α): 6 for two channels, 11 for ten, 17 for 64. `group_test`
   warns when it cannot reach significance.
 - **Enough bins per segment.** Keep the default `binning="locking"`. Scott's
-  rule sizes bins for one segment and gives too few on short ones.
+  rule sizes bins for one segment and gives too few on short ones. Strong
+  mixing makes it worse, because it locks the channels' phases tightly: with a
+  quarter-cycle lag and each channel 80% the other's source (SNR about 200),
+  the segment test with a fixed 20 bins called the coupling backwards in 8 of
+  50 recordings, while `"locking"` chose 54–64 bins and called none
+  backwards. The finer bins cost power: 12 of 50 found the right way, against
+  31 with 20 bins.
 - **Independent segments.** Segments cut from one recording share its slow
   drift, so they are not fully independent and the test is somewhat
   optimistic. Separate trials or recordings do not have that problem.
@@ -160,8 +195,11 @@ Where PTE's direction is reliable is mapped in
   (Winkler et al.); nonlinear coupling can survive time reversal
   ([Kořenek & Hlinka 2021](https://doi.org/10.3390/e23081067)). The table is
   the evidence for PTE.
-- **Common drivers.** Neither check catches a common driver that reaches the
-  two channels at different lags: that order really is in the data.
+- **Common drivers.** No check here catches a common driver that reaches the
+  two channels at different lags: that order really is in the data. The
+  coupled recordings in the table above are exactly that, one rhythm seen by
+  two channels 12 samples apart, so every coupling found there would be found
+  for a common driver too, segments, time reversal and `group_test` included.
 
 ### When the noise moves the null: centring
 
@@ -181,7 +219,7 @@ result.reversal_confirmed
 ```
 
 Simulated as above, the noisier channel driving, 40 recordings per row
-(found the right way / the wrong way):
+(found the right way / the wrong way; SNR is the driver's, in band):
 
 | driver | plain `significant` | centred | `reversal_confirmed` | centred + reversal | `PTE_segments` + `group_test` |
 |---|---|---|---|---|---|
@@ -227,15 +265,16 @@ group_test(dPTE)  # (n_epochs, m, m) in, one test per pair
   `binning="locking"`, pools each pair's phase locking over the epochs.
 - **Long epochs, or many.** Short epochs carry little directional information.
   Simulated coupling of 12 samples at 250 Hz with equal noise of 1.0 (in-band
-  signal-to-noise ratio about 17), 8–12 Hz, `time_reversal=True`, 20 runs
-  each:
+  signal-to-noise ratio about 17), each epoch band-passed to 8–12 Hz as part
+  of a longer stretch and then cropped, as when the continuous recording is
+  filtered before epoching, `time_reversal=True`, 20 runs each:
 
   | epochs | found the right way | wrong way |
   |---|---|---|
-  | 60 × 1 s | 1 | 0 |
-  | 240 × 1 s | 6 | 0 |
-  | 60 × 4 s | 18 | 0 |
-  | 30 × 8 s | 18 | 0 |
+  | 60 × 1 s | 2 | 0 |
+  | 240 × 1 s | 14 | 0 |
+  | 60 × 4 s | 17 | 0 |
+  | 30 × 8 s | 17 | 0 |
 
 `PTE_from_epochs` estimates the delay and bins once over all epochs, so every
 matrix is computed the same way. Band-pass the continuous recording before

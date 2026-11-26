@@ -518,11 +518,14 @@ def PTE_segments(
 
     The way to put a group test on one long recording: the matrices go to
     pyPTE.group_test, which asks whether a direction is consistent across
-    segments. With ``time_reversal=True`` that is the robust test of
-    direction, since directions produced by a difference in signal-to-noise
-    ratio or by instantaneous mixing cancel in every segment. The surrogate
-    test cannot do this for the differenced statistic, because its null
-    assumes independent channels.
+    segments. With ``time_reversal=True``, directions produced by a difference
+    in signal-to-noise ratio or by instantaneous mixing cancel in every
+    segment, so a direction it finds is rarely wrong. It is not the most
+    powerful test: at equal signal-to-noise ratio one surrogate test on the
+    whole recording finds more, and nothing here removes a common driver that
+    reaches two channels at different lags. The surrogate test cannot be used
+    on the differenced statistic, because its null assumes independent
+    channels.
 
     The phase is computed once over the whole recording, so the segments add
     no Hilbert edges, and every segment shares one delay and one bin count.

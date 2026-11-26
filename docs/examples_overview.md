@@ -4,7 +4,9 @@ The examples run as part of this site, see [the gallery](examples/index).
 
 Every example builds a system with known ground truth, runs `pyPTE`, and
 **asserts** the result. If an assertion fails, the claim it makes is no longer
-true.
+true. This site's build runs each of them in `--quick` mode, except
+`tvb_connectome`, and fails if one does; the numbers quoted are from full
+runs.
 
 ```bash
 uv sync --group examples
@@ -24,9 +26,9 @@ See [`examples/README.md`](https://github.com/patrk/pyPTE/blob/main/examples/REA
 
 ## Related work
 
-The example models here are self-contained on purpose, so they run in CI without
-extra dependencies. If you want richer or more citable ground-truth signals,
-these are the simulators worth knowing about:
+The example models here are self-contained on purpose, so they run in the
+docs build without extra dependencies. If you want richer or more citable
+ground-truth signals, these are the simulators worth knowing about:
 
 - **[The Virtual Brain](https://github.com/the-virtual-brain/tvb-root)**
   (`tvb-library`, GPL-3.0-or-later) — the reference whole-brain platform, and

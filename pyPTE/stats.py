@@ -638,6 +638,9 @@ def surrogate_test(
         not. ``reversal_confirmed`` marks pairs that are significant both ways
         round, with opposite signs, which is the conservative rule; the
         reversed recording is tested against the reverse of each surrogate.
+        Treat it as a confirmation rather than a detector: its calls are
+        very rarely wrong, but its power is set by the noisier channel's
+        signal-to-noise ratio and the recording length.
         ``differenced_dPTE`` comes back too, as an effect size. It doubles the
         run time, and it cannot catch a common driver that reaches the two
         channels at different lags, since that order is genuinely in the data.

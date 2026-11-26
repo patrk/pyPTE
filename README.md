@@ -15,13 +15,16 @@ appears:
 > **pyPTE recovers the direction of information flow between a pair of signals.
 > It does not recover the wiring diagram of a network.**
 
-Direction is reliable once the data are band-passed to the rhythm and checked
-with time reversal, and the coupling lag is more than a small fraction of a
-cycle; [#85](https://github.com/patrk/pyPTE/issues/85) maps where it breaks.
+Direction is reliable once the data are band-passed to the rhythm, binned
+finely enough for how tightly the channels lock (the default for segments and
+epochs), checked with time reversal, and clean enough in band, and the
+coupling lag is more than a small fraction of a cycle; [#85](https://github.com/patrk/pyPTE/issues/85) maps where it breaks.
 Which connections are *direct* is not recoverable from a bivariate measure, and [what can fool it](https://patrk.github.io/pyPTE/guide/pitfalls.html)
 shows exactly how that fails, with numbers. Every claim below is produced by a
-script in [`examples/`](examples/) that asserts its own result, so if something
-here stops being true, the test suite says so.
+script in [`examples/`](examples/) that asserts its own result. The docs build
+runs every example except the TVB one in quick mode on each pull request and
+fails if an assertion does, so if something here stops being true, the build
+says so; the numbers quoted come from full runs.
 
 Based on:
 
@@ -71,7 +74,7 @@ alpha = butter(4, [8, 12], btype="band", fs=fs, output="sos")
 signal = sosfiltfilt(alpha, np.vstack([driver, target]))
 dPTE, raw_PTE = PTE(signal, time_reversal=True)
 
-print(dPTE[0, 1])  # ~0.63 -> driver leads target
+print(dPTE[0, 1])  # ~0.63 -> flow from driver to target
 print(dPTE[1, 0])  # ~0.37 -> the reverse
 ```
 

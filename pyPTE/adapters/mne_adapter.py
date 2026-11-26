@@ -149,9 +149,10 @@ def PTE_from_epochs(
         as for pyPTE.PTE, applied to every epoch with shared settings
     time_reversal : bool
         return the time-reversal-differenced dPTE of each epoch, as for
-        pyPTE.PTE. Passed to group_test, this is the robust test of direction:
-        directions produced by signal-to-noise differences or instantaneous
-        mixing cancel in every epoch.
+        pyPTE.PTE. Passed to group_test, directions produced by
+        signal-to-noise differences or instantaneous mixing cancel in every
+        epoch, so a direction it finds is rarely wrong. A common driver that
+        reaches two channels at different lags still reads as a direction.
 
     Returns
     -------

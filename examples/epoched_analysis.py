@@ -259,7 +259,8 @@ def main(quick: bool = False) -> None:
         "\n          direction of flow throughout the chain."
         f"\n\n          But the three-hop pair a->d scores {three_hop:.3f} against"
         f"\n          {direct:.3f} for the real one-hop edges: a longer path is a"
-        "\n          longer lag, which PTE detects more easily. pyPTE recovers"
+        "\n          longer lag, and at 10 samples a hop a longer lag carries"
+        "\n          more of the driver's phase drift. pyPTE recovers"
         "\n          the flow, not the wiring: ranking pairs by dPTE puts the"
         "\n          connections that do not exist at the top."
     )
