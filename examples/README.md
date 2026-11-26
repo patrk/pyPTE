@@ -11,33 +11,40 @@ uv run python -m examples.two_node_coupling
 ```
 
 Pass `--quick` to any of them for a faster, lower-resolution run. Figures are
-written to `examples/figures/`.
+written to `examples/figures/`. The docs build runs every example except
+`tvb_connectome` in quick mode and fails if an assertion does; the numbers
+below are from full runs.
+
+Signal-to-noise ratios below are in-band, as power, after the band-pass
+filter. The Kuramoto, Jansen-Rit and TVB models add their noise inside the
+dynamics and none on the measurement, so no such ratio applies to them.
 
 ## Suggested order
 
 ### 1. `two_node_coupling.py` — does it recover direction at all?
 
-One oscillator drives another with a fixed lag; both carry the same noise, are
-band-passed to the rhythm and analysed with time reversal and
-`binning="locking"`. Sweeps coupling strength and lag, confirming dPTE rises
+One oscillator drives another with a fixed lag; both carry the same noise
+(SNR about 70), are band-passed to the rhythm and analysed with time reversal
+and `binning="locking"`. Sweeps coupling strength and lag, confirming dPTE rises
 above 0.5 in the driving direction (0.71 at full coupling), falls below in
 reverse, and sits at 0.5 when the two are independent. It grows with the lag,
 from 0.54 at 2 samples to about 0.8 near a full cycle.
 
 The fourth panel is the counterweight and the most important part: two
 **independent** oscillators differing only in signal-to-noise ratio. Plain
-dPTE climbs to 0.78 at an eight-fold noise gap, because the noisier channel is
-less predictable from its own past and the cleaner one appears to drive it.
-The time-reversal-differenced dPTE stays at 0.49.
+dPTE climbs to 0.78 at an eight-fold noise gap (SNR 190 against 3), because
+the noisier channel is less predictable from its own past and the cleaner one
+appears to drive it. The time-reversal-differenced dPTE stays at 0.49.
 
 ### 2. `significance_testing.py` — what fixes that
 
 Opens up `surrogate_test` rather than just using it. Three band-passed
-channels: A really drives C, with equal noise, while B is independent but
-eight times noisier. In the raw matrix both A→B (0.72 on average) and A→C
-(0.85) look like findings. Against its own null the artefact is rejected in 8
-of 10 realisations, but not in the one the figure shows; time reversal rejects
-it in all ten and confirms A→C in all ten.
+channels: A really drives C, with equal noise (SNR 190), while B is
+independent but eight times noisier (SNR 3). In the raw matrix both A→B
+(0.72 on average) and A→C (0.85) look like findings. Against its own null
+the artefact is rejected in 8 of 10 realisations, but not in the one the
+figure shows; time reversal rejects it in all ten and confirms A→C in all
+ten.
 
 Also draws the Benjamini-Hochberg cutoff, so the correction is visible rather
 than implied.
@@ -81,13 +88,15 @@ recording length separates the two.
 
 ### 5. `epoched_analysis.py` — the pipeline you would actually run
 
-Two conditions, many short epochs, group statistics, both corrections. Shows
-that 25 one-second epochs resolve coupling that a comparable stretch of
-continuous recording leaves marginal: pooling over short epochs is the method,
-not a compromise.
+Two conditions, 40 epochs of 8 s each, group statistics, both corrections.
+Sweeping the epoch count shows how much data the direction needs: 5 epochs
+(40 s) find none of the three edges, 10 find one, and 20 or more find all
+three. Epochs let you compare conditions; they do not get more out of the
+data than one recording of the same total length.
 
 It also quantifies the central limitation. In a chain `a → b → c → d` where only
-one-hop links exist:
+one-hop links exist, 10 samples per hop, SNR about 70 at `a` falling to about
+40 at `d`:
 
 | separation | mean dPTE | real edge? |
 |---|---:|---|
@@ -95,8 +104,9 @@ one-hop links exist:
 | 2 hops | 0.625 | no |
 | 3 hops | **0.659** | no |
 
-dPTE rises with path length, so ranking pairs by it returns close to the inverse
-of the true network. pyPTE recovers the flow, not the wiring.
+dPTE rises with path length at this per-hop lag, so ranking pairs by it
+returns close to the inverse of the true network. pyPTE recovers the flow,
+not the wiring.
 
 ### 6. `tvb_connectome.py` — the same question on real anatomy
 

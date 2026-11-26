@@ -43,7 +43,7 @@ alpha = butter(4, [8, 12], btype="band", fs=fs, output="sos")
 signal = sosfiltfilt(alpha, np.vstack([driver, target]))
 dPTE, raw_PTE = PTE(signal, time_reversal=True)
 
-print(dPTE[0, 1])  # ~0.63 -> driver leads target
+print(dPTE[0, 1])  # ~0.63 -> flow from driver to target
 print(dPTE[1, 0])  # ~0.37 -> the reverse
 ```
 
